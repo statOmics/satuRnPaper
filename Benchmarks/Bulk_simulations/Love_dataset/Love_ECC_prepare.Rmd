@@ -1,0 +1,272 @@
+---
+title: "Prepare_Love_dataset"
+output: html_document
+---
+
+```{r}
+### Salmon quantification of Love et al simulated data downloaded from:
+# https://zenodo.org/record/1291522/files/salmon.tgz # must be unpacked (tar -zxvf salmon.tgz )
+### The ground truth of ths simulation is downloaded from:
+# https://github.com/mikelove/rnaseqDTU/raw/master/data/simulate.rda
+### GTF: ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_28/gencode.v28.chr_patch_hapl_scaff.annotation.gtf.gz
+```
+
+```{r, message=F}
+library(tximport)
+library(BANDITS)
+library(DRIMSeq)
+library(edgeR)
+```
+
+```{r}
+data_dir <- "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/data_1.1.0_ECC/"
+
+sample_names <- c("sample_01","sample_02","sample_03","sample_04","sample_05","sample_06","sample_07","sample_08","sample_09","sample_10","sample_11","sample_12","sample_13","sample_14","sample_15","sample_16","sample_17","sample_18","sample_19","sample_20","sample_21","sample_22","sample_23","sample_24")
+quant_files <- file.path(data_dir, sample_names, "quant.sf")
+file.exists(quant_files)
+
+txi <- tximport(files = quant_files, type = "salmon", txOut = TRUE, countsFromAbundance="no")
+#txi <- tximport(files = quant_files, type = "salmon", txOut = TRUE, countsFromAbundance="scaledTPM")
+
+myDesign <- data.frame(sample_id = sample_names, condition = rep(c("group1","group2"),each=12))
+
+myDesign$sample_id <- as.character(myDesign$sample_id)
+myDesign$condition <- as.character(myDesign$condition)
+
+colnames(txi$counts) <- myDesign$sample_id
+colnames(txi$abundance) <- myDesign$sample_id
+
+eff_len <- eff_len_compute(x_eff_len = txi$length)
+saveRDS(eff_len, "eff_len.Rds")
+
+equiv_classes_files <- file.path(data_dir, sample_names,
+                                "aux_info", "eq_classes.txt")
+file.exists(equiv_classes_files)
+```
+
+```{r}
+load('simulate.rda')
+# Loaded:
+#   dge.genes, disps, dte.genes, dtu.genes, fold_changes, frag_GC_bias,
+#   iso.dge, iso.dte, iso.dte.only, iso.dtu, sim.counts.mat, sim_counts, tpms, txdf
+```
+
+```{r}
+### Make our tx info copy (to match other benchmark data)
+txInfo <- txdf[,2:1]
+colnames(txInfo) <- c('isoform_id','gene_id')
+
+### Define truth from loaded from 'simulate.rda' (modified from: https://github.com/mikelove/swimdown/blob/v1.0/dtu/dtu_analysis.R )
+txdf <- txdf[match(rownames(tpms), txdf$TXNAME),]
+txdf$dtu.genes <- iso.dtu | iso.dte & !iso.dte.only
+full.dtu.genes <- unique(txdf$GENEID[txdf$dtu.genes])
+
+txp.exprs <- rowSums(tpms) > 0
+dtu.dte.genes <- unique(txdf$GENEID[iso.dte & !iso.dte.only])
+txdf$full.dtu <- iso.dtu | (txdf$GENEID %in% dtu.dte.genes & txp.exprs)
+dtu.txps <- txdf$TXNAME[txdf$full.dtu] # Used as the truth in Love et al 2018
+
+### Assign truth to our info df
+txInfo$geneModified <- txInfo$isoform_id %in% dtu.txps
+
+### Set parameters
+samplesPrCondition   <- c(3,6,10)
+nrRepsMade           <- 3
+nrCoresToUse         <- 2
+
+
+### Set up parallel processing
+if(nrCoresToUse != 1) {
+    doParallel <- TRUE
+    doProgress <- 'none'
+
+    library(doMC)
+    registerDoMC(cores = nrCoresToUse)
+} else {
+    doParallel <- FALSE
+    doProgress <- 'text'
+}
+
+### list for looping
+nrRepList <- split(
+    rep(
+        x = samplesPrCondition,
+        times = nrRepsMade
+    ),
+    paste0(
+        'samples_used_',
+        rep(
+            x = samplesPrCondition,
+            times = nrRepsMade
+        ),
+        '_rep_',
+        sort( rep(
+            x = 1:nrRepsMade,
+            times = length(samplesPrCondition)
+        ) )
+    )
+)
+
+### Sanity check
+length(nrRepList) == length(samplesPrCondition) * nrRepsMade
+table(sapply(nrRepList, length))
+```
+
+Lenient filtering
+
+```{r}
+loveBenchmarkDataLenient <- lapply(c(1:length(nrRepList)), function(x) {
+      
+    ### Step 1: Extract random sub-sample of correct size
+    set.seed(x)
+    localSampleSize <- nrRepList[[x]]
+      
+    if(TRUE) {
+          
+        samplesToUseCond1 <- sample(myDesign$sample_id[which(myDesign$condition == 'group1')], localSampleSize)
+        samplesToUseCond2 <- sample(myDesign$sample_id[which(myDesign$condition == 'group2')], localSampleSize)
+        
+        samplesToUseCond1 <- as.character(samplesToUseCond1)
+        samplesToUseCond2 <- as.character(samplesToUseCond2)
+
+        localDesign <- myDesign[which(
+            myDesign$sample_id %in% c(
+                samplesToUseCond1,
+                samplesToUseCond2
+            )
+        ),]
+        }
+
+        ### Step 2: Subset to expressed features using edgeR::filterByExpr
+        if(TRUE) {
+          
+            y <- edgeR::DGEList(counts = txi$counts[,localDesign$sample_id])
+            design <- model.matrix(~condition, data=localDesign)
+            
+            filter <- edgeR::filterByExpr(y,design=design) 
+            
+            localCm <- y$counts[filter,]
+            
+            ## Get only multi-isoform genes (after filtering)
+            localTx <- txInfo[which(
+                txInfo$isoform_id %in% rownames(localCm)),]
+            
+            tmp <- table(localTx$gene_id)
+            tmp <- tmp[which( tmp >= 2)]
+        
+            localTx <- localTx[which(localTx$gene_id %in% names(tmp)),]
+            localCm <- localCm[which(rownames(localCm) %in% localTx$isoform_id),]
+            
+            ## add column with sample size for easy retrieval
+            localTx$nrSamplesPerCondition <- localSampleSize
+        }
+
+        colnames(localTx) <- c('TXNAME','GENEID','gene_modified','nrSamplesPerCondition')
+
+        ### Combine data
+        dataList <- list(
+            data     = localCm,
+            design   = localDesign,
+            metaInfo = localTx
+        )
+        
+        return(dataList)
+    }
+)
+
+names(loveBenchmarkDataLenient) <- names(nrRepList)
+```
+
+Stringent filtering
+
+```{r}
+loveBenchmarkDataStringent <- lapply(c(1:length(nrRepList)), function(x) {
+      
+    ### Step 1: Extract random sub-sample of correct size
+    set.seed(x)
+    localSampleSize <- nrRepList[[x]]
+      
+    if(TRUE) {
+          
+        samplesToUseCond1 <- sample( myDesign$sample_id[which(myDesign$condition == 'group1')], localSampleSize)
+        samplesToUseCond2 <- sample( myDesign$sample_id[which(myDesign$condition == 'group2')], localSampleSize)
+        
+        samplesToUseCond1 <- as.character(samplesToUseCond1)
+        samplesToUseCond2 <- as.character(samplesToUseCond2)
+
+        localDesign <- myDesign[which(
+            myDesign$sample_id %in% c(
+                samplesToUseCond1,
+                samplesToUseCond2
+            )
+        ),]
+    }
+    
+    
+
+        ### Step 2: Subset to expressed features using DRIMSeq::dmFilter
+        if(TRUE) {
+          
+          localCm <- txi$counts[,localDesign$sample_id]
+          localCm <- as.data.frame(localCm)
+          colnames(localCm)
+
+          geneForEachTx <- txInfo[match(rownames(localCm),txInfo[,"isoform_id"]),"gene_id"]
+
+          localCm$gene_id <- geneForEachTx
+          localCm$feature_id <- row.names(localCm)
+          
+
+          d <- DRIMSeq::dmDSdata(counts = localCm, samples = localDesign)
+
+          d <- dmFilter(d,
+                min_samps_feature_expr=localSampleSize/2, min_feature_expr=10, min_samps_feature_prop=localSampleSize/2, min_feature_prop=0.1,
+                min_samps_gene_expr=localSampleSize, min_gene_expr=10)
+
+          localCm <- txi$counts[counts(d)$feature_id,localDesign$sample_id]
+
+          ## Get only multi-isoform genes (after filtering)
+          localTx <- txInfo[which(
+              txInfo$isoform_id %in% rownames(localCm)),]
+          
+          tmp <- table(localTx$gene_id)
+          tmp <- tmp[which( tmp >= 2)]
+        
+          localTx <- localTx[which(localTx$gene_id %in% names(tmp)),]
+          localCm <- localCm[which(rownames(localCm) %in% localTx$isoform_id),]
+            
+            
+          ## add column with sample size for easy retrieval
+          localTx$nrSamplesPerCondition <- localSampleSize
+        }
+
+        colnames(localTx) <- c('TXNAME','GENEID','gene_modified','nrSamplesPerCondition')
+
+        ### Combine data
+        dataList <- list(
+            data     = localCm,
+            design   = localDesign,
+            metaInfo = localTx
+        )
+
+        return(dataList)
+    }
+)
+
+names(loveBenchmarkDataStringent) <- names(nrRepList)
+```
+
+Save dataset
+
+```{r}
+save(loveBenchmarkDataLenient, loveBenchmarkDataStringent, file='/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Bulk_simulations/Love_dataset_ECC/01_love_et_al_benchmark_data_ECC_counts.Rdata')
+
+# save(loveBenchmarkDataLenient, loveBenchmarkDataStringent, file='/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Bulk_simulations/Love_dataset_ECC/01_love_et_al_benchmark_data_ECC_tpm.Rdata')
+```
+
+
+
+
+
+
+
