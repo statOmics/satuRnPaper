@@ -1,0 +1,173 @@
+---
+title: "Love_ECC_visualize"
+output: html_document
+---
+
+```{r,message=FALSE}
+library(tidyverse)
+library(iCOBRA)
+```
+
+Load data
+
+```{r}
+if(TRUE) {
+    # load(file='01_love_et_al_benchmark_data_ECC_tpm.Rdata')
+    # load(file='02_love_et_al_benchmark_DTU_analysis_ECC_tpm.Rdata')
+    
+    load(file='01_love_et_al_benchmark_data_ECC_counts.Rdata')
+    load(file='02_love_et_al_benchmark_DTU_analysis_ECC_count.Rdata')
+  
+    loveBenchmark <- c(
+        loveDtuBenchmark_quasiBinomial,
+        loveDtuBenchmark_DoubleExpSeq,
+        loveDtuBenchmark_limmaDiffsplice,
+        loveDtuBenchmark_edgeRdiffsplice,
+        loveDtuBenchmark_DEXSeq,
+        loveDtuBenchmark_DRIMSeq,
+        loveDtuBenchmark_NBSplice
+    )
+    
+    ### Remove empty enteries (due to not tested - aka to many samples for reasonable runtime)
+    loveBenchmark  <- loveBenchmark[which(
+        sapply(loveBenchmark, function(x) ! is.null(x$dtuAnalysis))
+    )]
+    
+    rm(loveDtuBenchmark_quasiBinomial,
+        loveDtuBenchmark_DoubleExpSeq,
+        loveDtuBenchmark_limmaDiffsplice,
+        loveDtuBenchmark_edgeRdiffsplice,
+        loveDtuBenchmark_DEXSeq,
+        loveDtuBenchmark_DRIMSeq,
+        loveDtuBenchmark_NBSplice)
+    invisible(gc())
+}
+
+truth_file <- read.table("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Love_data/truth_Love.txt")
+```
+
+```{r}
+get_pvalues <- function(dataset,nrep,nmethods) {
+
+  get_all_txs <- function(dataset,nrep){
+  
+    all_txs <- c()
+ 
+    for (i in 1:nrep) {
+      current_txs <- as.character(dataset[[i]]$dtuAnalysis$TXNAME)
+      all_txs <- c(all_txs, current_txs)
+      all_txs <- unique(all_txs)
+    }
+    return(all_txs)
+  }
+
+  all_txs <- get_all_txs(dataset,nrep)
+  pvalues <- matrix(data=NA, nrow=length(all_txs), ncol=nmethods*nrep)
+  rownames(pvalues) <- all_txs
+  
+  for (i in 1:(nmethods*nrep)) {
+    pvalues_new <- data.frame(dataset[[i]]$dtuAnalysis$p_value)
+    rownames(pvalues_new) <- dataset[[i]]$dtuAnalysis$TXNAME
+    colnames(pvalues_new) <- names(dataset)[i]
+
+    pvalues[,i] <- pvalues_new[match(rownames(pvalues),rownames(pvalues_new)),1]
+  }
+  
+  pvalues <- apply(pvalues, 2, as.numeric)
+  rownames(pvalues) <- all_txs
+  pvalues <- as.data.frame(pvalues)
+  pvalues <- pvalues[order(rownames(pvalues)),]
+  
+  colnames(pvalues) <- c("quasiBinomial", "DoubleExpSeq", "limmaDiffsplice", "edgeRDiffsplice", "DEXSeq", "DRIMSeq", "NBSplice")
+
+  return(pvalues)
+}
+```
+
+```{r}
+visualize_datasets <- function(dataset,nFilters,nSampleSizes,nrep,nmethods) {
+  
+  nDatasets <- nFilters * nSampleSizes
+  print(paste("This function will generate",nDatasets, "plots"))
+  
+  ##  We must select the correct dataframes from the list, based on the list names
+  selection <- c("3_rep_._filterLenient","6_rep_._filterLenient","10_rep_._filterLenient","3_rep_._filterStringent","6_rep_._filterStringent","10_rep_._filterStringent")
+  
+  for (j in 1:nDatasets) {
+    print(j) # print progress
+
+    # get current dataset
+    loveBenchmark_dataset <- loveBenchmark[grepl(selection[j], names(loveBenchmark))]
+    
+    pvalues <- list()
+    truths <- list()
+    
+    for (k in 1:nrep) {
+        
+        # get current repeat of current dataset
+        loveBenchmark_dataset_rep <- loveBenchmark_dataset[grep(paste0("rep_",k,"_fil"),names(loveBenchmark_dataset))]
+        pvalues_current <- get_pvalues(loveBenchmark_dataset_rep,1,nmethods)
+        head(rownames(pvalues_current))
+
+        pvalues_current[is.na(pvalues_current)] <- 1
+
+        truth_file_current <- truth_file[truth_file$TXNAME %in% rownames(pvalues_current),]
+        truth_file_current <- truth_file_current[order(truth_file_current$TXNAME),]
+        
+        # to allow for calculating average results over repeats, I concatenate thte results over repeats, which requires non-identical rownames
+        rownames(pvalues_current) <- paste0(rownames(pvalues_current),"_",k)
+        rownames(truth_file_current) <- truth_file_current$TXNAME <- rownames(pvalues_current)
+        
+        pvalues[[k]] <- pvalues_current
+        truths[[k]] <- truth_file_current
+    }
+
+    # concatenate to get average performance over the three datasets
+    pvalues_full <- rbind(pvalues[[1]],pvalues[[2]],pvalues[[3]])
+    truth_full <- rbind(truths[[1]],truths[[2]],truths[[3]]) 
+
+    cobra <- COBRAData(pval = pvalues_full, truth = truth_full)
+    cobra <- calculate_adjp(cobra)
+    cobra1perf <- calculate_performance(cobra, binary_truth = "truth", cont_truth = "none", splv = "none", aspects = c("fdrtpr", "fdrtprcurve", "overlap"))
+    
+    cobraplot <- prepare_data_for_plot(cobra1perf, colorscheme = "Dark2", facetted = TRUE)
+    
+    new_col <- c(rep(c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "black", "#999999"),4),rep("white",16))
+    names(new_col) <- names(cobraplot@plotcolors)
+    cobraplot@plotcolors <- new_col
+  
+    plot_full <- plot_fdrtprcurve(cobraplot, xaxisrange = c(0, 0.35), yaxisrange = c(0,0.85))
+    
+    titles <- c("3 versus 3 - edgeR filter","6 versus 6 - edgeR filter","10 versus 10 - edgeR filter","3 versus 3 - DRIMSeq filter","6 versus 6 - DRIMSeq filter","10 versus 10 - DRIMSeq filter")
+    current_title <- titles[j]
+
+    plot_full <- plot_full + 
+      ggtitle(current_title) +
+      theme(strip.background = element_blank(),
+            strip.text.x = element_blank(),
+            plot.title = element_text(size=10),
+            axis.text.x = element_text(size = 10),
+            axis.text.y = element_text(size = 10),
+            axis.title.x = element_text(size = 10),
+            axis.title.y = element_text(size = 10))
+    
+    # png(paste("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Results/Love_ECC_benchmark/plot_icobra_tpm_", j, ".png", sep = ""),
+    #       width     = 5.5,
+    #       height    = 4.5,
+    #       units     = "in",
+    #       res       = 200,
+    #       pointsize = 4) # start export
+
+    print(plot_full)
+    # dev.off()
+  }
+}
+```
+
+```{r}
+visualize_datasets(dataset=loveBenchmark,
+                   nFilters=2,
+                   nSampleSizes=3,
+                   nrep=3,
+                   nmethods=7)
+```

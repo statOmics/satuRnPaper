@@ -26,7 +26,7 @@ quant_files <- file.path(data_dir, sample_names, "quant.sf")
 file.exists(quant_files)
 
 txi <- tximport(files = quant_files, type = "salmon", txOut = TRUE, countsFromAbundance="no")
-#txi <- tximport(files = quant_files, type = "salmon", txOut = TRUE, countsFromAbundance="scaledTPM")
+#txi <- tximport(files = quant_files, type = "salmon", txOut = TRUE, countsFromAbundance="scaledTPM") # if scaledTPM instead of raw counts
 
 myDesign <- data.frame(sample_id = sample_names, condition = rep(c("group1","group2"),each=12))
 
@@ -261,7 +261,7 @@ Save dataset
 ```{r}
 save(loveBenchmarkDataLenient, loveBenchmarkDataStringent, file='/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Bulk_simulations/Love_dataset_ECC/01_love_et_al_benchmark_data_ECC_counts.Rdata')
 
-# save(loveBenchmarkDataLenient, loveBenchmarkDataStringent, file='/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Bulk_simulations/Love_dataset_ECC/01_love_et_al_benchmark_data_ECC_tpm.Rdata')
+# save(loveBenchmarkDataLenient, loveBenchmarkDataStringent, file='/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Bulk_simulations/Love_dataset_ECC/01_love_et_al_benchmark_data_ECC_tpm.Rdata') # if scaledTPM instead of raw counts
 ```
 
 
