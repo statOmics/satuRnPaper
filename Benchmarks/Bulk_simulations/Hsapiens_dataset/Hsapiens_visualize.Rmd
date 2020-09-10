@@ -118,7 +118,7 @@ selection <- c("filterLenient","filterStringent")
             axis.title.x = element_text(size = 10),
             axis.title.y = element_text(size = 10))
       
-      # png(paste("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Results/Hsapiens_benchmark/plot_icobra_tpm_", j, ".png", sep = ""),
+      # png(paste("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Results/Hsapiens_benchmark/plot_icobra_tpm_", selection[j], ".png", sep = ""),
       #     width     = 5.5,
       #     height    = 4.5,
       #     units     = "in",
