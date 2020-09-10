@@ -9,9 +9,9 @@ library(DRIMSeq)
 ```
 
 ```{r}
-quantsf_counts <- readRDS(file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Tasic_data/quantsf_scaled_TPM")
+# quantsf_counts <- readRDS(file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Tasic_data/quantsf_scaled_TPM")
 
-#quantsf_counts <- readRDS(file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Tasic_data/quantsf_counts")
+quantsf_counts <- readRDS(file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Tasic_data/quantsf_counts")
 
 ## remove transcripts with zero count for all cells
 quantsf_counts <- quantsf_counts[which(rowSums(quantsf_counts)!=0),]
@@ -351,8 +351,8 @@ names(TasicBenchmarkStringent) <- paste0(names(nrRepList),"_filterStringent")
 ```
 
 ```{r}
-save(TasicBenchmarkLenient, TasicBenchmarkStringent, file='01_Tasic_benchmark_data_scaledTPM_20200907.Rdata')
-#save(TasicBenchmarkLenient, TasicBenchmarkStringent, file='01_Tasic_benchmark_data_count_20200907.Rdata')
+save(TasicBenchmarkLenient, TasicBenchmarkStringent, file='01_Tasic_benchmark_data_count.Rdata')
+#save(TasicBenchmarkLenient, TasicBenchmarkStringent, file='01_Tasic_benchmark_data_scaledTPM.Rdata')
 ```
 
 

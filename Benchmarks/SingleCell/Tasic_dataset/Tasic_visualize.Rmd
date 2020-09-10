@@ -1,10 +1,11 @@
 ---
-title: "Tasic_visualize"
+title: "Tasic_visualize_2"
 output: html_document
 ---
 
 ```{r,message=FALSE}
 library(tidyverse)
+library(iCOBRA)
 ```
 
 Load truth file
@@ -13,7 +14,8 @@ Load truth file
 ### Load and concatenate data
 if(TRUE) {
 
-    load(file='01_Tasic_benchmark_data.Rdata')
+    load('01_Tasic_benchmark_data_count.Rdata')
+    #load(file='01_Tasic_benchmark_data_scaledTPM.Rdata')
   
     ### Concatenate
     metaInfo <- c(
@@ -29,10 +31,11 @@ Load DTU performance data
 
 ```{r}
 if(TRUE) {
-    load(file='02_Tasic_DTU_analysis_full.Rdata')
+
+    load(file='02_Tasic_DTU_analysis_full_count.Rdata')
+    #load(file='02_Tasic_DTU_analysis_full_scaledTPM.Rdata')
   
     TasicBenchmark <- c(
-        TasicDtuBenchmark_edgeRtotal,
         TasicDtuBenchmark_quasiBinomial,
         TasicDtuBenchmark_limmaDiffsplice,
         TasicDtuBenchmark_DEXSeq,
@@ -46,8 +49,7 @@ if(TRUE) {
         sapply(TasicBenchmark, function(x) ! is.null(x$dtuAnalysis))
     )]
     
-    rm(TasicDtuBenchmark_edgeRtotal,
-        TasicDtuBenchmark_quasiBinomial,
+    rm(TasicDtuBenchmark_quasiBinomial,
         TasicDtuBenchmark_limmaDiffsplice,
         TasicDtuBenchmark_DEXSeq,
         TasicDtuBenchmark_DRIMSeq,
@@ -66,7 +68,7 @@ get_pvalues <- function(dataset,nrep,nmethods) {
   
     all_txs <- c()
     for (i in 1:nrep) {
-      current_txs <- dataset[[i]]$dtuAnalysis$TXNAME
+      current_txs <- as.character(dataset[[i]]$dtuAnalysis$TXNAME)
       all_txs <- c(all_txs, current_txs)
       all_txs <- unique(all_txs)
     }
@@ -79,7 +81,7 @@ get_pvalues <- function(dataset,nrep,nmethods) {
   
   for (i in 1:(nmethods*nrep)) {
     pvalues_new <- data.frame(dataset[[i]]$dtuAnalysis$p_value)
-    rownames(pvalues_new) <- dataset[[i]]$dtuAnalysis$TXNAME
+    rownames(pvalues_new) <- as.character(dataset[[i]]$dtuAnalysis$TXNAME)
     colnames(pvalues_new) <- names(dataset)[i]
 
     pvalues[,i] <- pvalues_new[match(rownames(pvalues),rownames(pvalues_new)),1]
@@ -90,10 +92,11 @@ get_pvalues <- function(dataset,nrep,nmethods) {
   pvalues <- as.data.frame(pvalues)
   pvalues <- pvalues[order(rownames(pvalues)),]
   
-  if(nmethods == 7){
-    colnames(pvalues) <- c("edgeR_total", "quasiBinomial", "limma_diffsplice", "DEXSeq", "DRIMSeq","edgeR_diffsplice", "DoubleExpSeq")
+  if(nmethods == 6){
+    colnames(pvalues) <- c("quasiBinomial", "limma_diffsplice", "DEXSeq", "DRIMSeq","edgeR_diffsplice", "DoubleExpSeq")
   } else {
-    colnames(pvalues) <- c("edgeR_total", "quasiBinomial", "limma_diffsplice","edgeR_diffsplice", "DoubleExpSeq")
+    #colnames(pvalues) <- c("edgeR_total", "quasiBinomial", "limma_diffsplice","edgeR_diffsplice", "DoubleExpSeq")
+    colnames(pvalues) <- c("quasiBinomial", "limma_diffsplice","edgeR_diffsplice", "DoubleExpSeq")
   }
   return(pvalues)
 }
@@ -111,22 +114,21 @@ visualize_datasets <- function(dataset,metaInfo,nFilters,nSampleSizes,nRep,nmeth
   
     for (j in 1:nPlots) {
         print(j)
-        TasicBenchmark_current_outer <- dataset[grepl(selection[j], names(dataset))]
-  
+        Tasic_current_outer <- dataset[grepl(selection[j], names(dataset))]
         metaInfo_current_outer <- metaInfo[grepl(selection2[j], names(metaInfo))]
 
         resList <- c()
         count <- count+1
 
         for (k in 1:length(nRep)) {
-            TasicBenchmark_current_inner <- TasicBenchmark_current_outer[grepl(nRep[k], names(TasicBenchmark_current_outer))]
+            Tasic_current_inner <- Tasic_current_outer[grepl(nRep[k], names(Tasic_current_outer))]
 
             metaInfo_current_inner <- metaInfo_current_outer[grepl(nRep[k], names(metaInfo_current_outer))]
     
-            pvalues <- get_pvalues(TasicBenchmark_current_inner,1,nmethods)
-            pvalues <- pvalues[,c("quasiBinomial", "DoubleExpSeq")]
-            
-            truth_file <- TasicBenchmark_current_inner[[1]]$dtuAnalysis
+            pvalues <- get_pvalues(Tasic_current_inner,nrep=1,nmethods)
+            #pvalues <- pvalues[,c(2,3)]
+
+            truth_file <- Tasic_current_inner[[1]]$dtuAnalysis
     
             if(count <= nSampleSizes){
                 txSwapped <- metaInfo_current_inner[1]          
@@ -141,127 +143,81 @@ visualize_datasets <- function(dataset,metaInfo,nFilters,nSampleSizes,nRep,nmeth
             truth_file$gene_modified <- as.numeric(txSwapped[[1]]$metaInfo$txSwapped)
             truth_file <- truth_file[order(truth_file$TXNAME),]
             rownames(truth_file) <- truth_file$TXNAME
-            
-            alphaSeq <- c(seq(1e-16,1e-9,length=100),seq(5e-9,1e-3,length=250),seq(1e-2,1,length=500))
-            truths <- as.logical(truth_file$gene_modified)
-            # performance for all p-value based methods
-            hlp <- apply(pvalues,2,function(x){
-                padj <- p.adjust(x,"fdr")
-                df <- as.data.frame(t(sapply(alphaSeq, function(alpha){
-                    R <- which(padj <= alpha)
-                    fdr <- sum(!truths[R])/length(R) #false over rejected
-                    tpr <- sum(truths[R])/sum(truths) #TP over all true
-                    c(fdr=fdr, tpr=tpr, cutoff=alpha)
-                })))
-            })
-            # summarize
-            dfIter <- do.call(rbind,hlp)
-            dfIter$method=rep(colnames(pvalues),each=length(alphaSeq))
-            resList[[k]] <- dfIter
+
+            resList[[k]] <- list(pvalues,truth_file)
+        }
+        
+        rownames(resList[[1]][[1]]) <- paste0(rownames(resList[[1]][[1]]), "_1")
+        rownames(resList[[2]][[1]]) <- paste0(rownames(resList[[2]][[1]]), "_2")
+        rownames(resList[[3]][[1]]) <- paste0(rownames(resList[[3]][[1]]), "_3")
+        
+        pvalues_full <- rbind(resList[[1]][[1]],resList[[2]][[1]],resList[[3]][[1]])
+        
+        rownames(resList[[1]][[2]]) <- paste0(rownames(resList[[1]][[2]]), "_1")
+        rownames(resList[[2]][[2]]) <- paste0(rownames(resList[[2]][[2]]), "_2")
+        rownames(resList[[3]][[2]]) <- paste0(rownames(resList[[3]][[2]]), "_3")
+        
+        truth_file_full <- rbind(resList[[1]][[2]],resList[[2]][[2]],resList[[3]][[2]])
+        
+        cobra <- COBRAData(pval = pvalues_full, truth = truth_file_full)
+        cobra <- calculate_adjp(cobra)
+        cobra1perf <- calculate_performance(cobra, binary_truth = "gene_modified", cont_truth = "none", splv = "none", aspects = c("fdrtpr", "fdrtprcurve", "overlap"))
+
+        cobraplot <- prepare_data_for_plot(cobra1perf, colorscheme = "Dark2", facetted = TRUE)
+        
+        if (nmethods == 6){
+            new_col <- c(rep(c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "black", "#999999"),4),rep("white",14))
+            names(new_col) <- names(cobraplot@plotcolors)
+            cobraplot@plotcolors <- new_col
+    
+            plot <- plot_fdrtprcurve(cobraplot, xaxisrange = c(0, 0.4), yaxisrange = c(0,0.75))
+    
+            titles <- c("20 versus 20 - edgeR filter","20 versus 20 - DRIMSeq filter")
+            current_title <- titles[j]
+        } else {
+            new_col <- c(rep(c("#56B4E9", "#F0E442", "#0072B2", "black", "#999999"),4),rep("white",10))
+            names(new_col) <- names(cobraplot@plotcolors)
+            cobraplot@plotcolors <- new_col
+    
+            plot <- plot_fdrtprcurve(cobraplot, xaxisrange = c(0, 0.3), yaxisrange = c(0,1))
+    
+            titles <- c("75 versus 75 - edgeR filter","200 versus 200 - edgeR filter","75 versus 75 - DRIMSeq filter","200 versus 200 - DRIMSeq filter")
+            current_title <- titles[j]
         }
 
-        df <- as_tibble(do.call(rbind,resList))
-        df$method <- substr(df$method,1,nchar(df$method))
+        plot <- plot + 
+            ggtitle(current_title) +
+            theme(strip.background = element_blank(),
+            strip.text.x = element_blank(),
+            plot.title = element_text(size=10),
+            axis.text.x = element_text(size = 10),
+            axis.text.y = element_text(size = 10),
+            axis.title.x = element_text(size = 10),
+            axis.title.y = element_text(size = 10))
 
-        df <- df %>% group_by(method,cutoff) %>%
-            summarize(meanTPR=mean(tpr,na.rm=TRUE),
-                meanFDR=mean(fdr,na.rm=TRUE), sdTPR=sd(tpr,na.rm=TRUE)) %>%  
-            arrange(method,cutoff)
-
-    pointData <- df[which(df$cutoff %in% c(0.01,df[371,],df[396,])),c(1:4)]
-    pointData$fill <- pointData$cutoff >= pointData$meanFDR
-    pointData$fill_shape <- NA
-    pointData$fill_shape <- as.numeric(pointData$fill_shape)
-    pointData[which(pointData$fill == FALSE),"fill_shape"] <- 5
-    pointData[which(pointData$fill == TRUE),"fill_shape"] <- 19
-    
-    if(nmethods == 7){
-        pMeanAll <- ggplot(df, aes(x=meanFDR, y=meanTPR, col=method)) +
-          geom_line(size=0.75) +
-          scale_x_continuous(limits = c(0, 0.4), breaks = c(0.01, 0.05, 0.1),
-                   minor_breaks = c(0:5) * .1) +
-          scale_y_continuous(limits = c(0, 1)) + 
-          xlab("FDR") + 
-          ylab("TPR") +
-          geom_ribbon(aes(ymin=meanTPR-sdTPR,ymax=meanTPR+sdTPR,fill=method), alpha=0.2) + 
-          #scale_color_manual(values=c("red","olivedrab4","darkgoldenrod","blue","cyan3","purple","black","grey34")) + 
-          #scale_fill_manual(values= c("red", "olivedrab4", "darkgoldenrod", "blue", "cyan3", "purple","black","grey34")) +
-          scale_color_manual(values=c("olivedrab4","black")) + 
-          scale_fill_manual(values= c("olivedrab4","black")) +
-          ggtitle(selection[j]) + 
-          geom_vline(xintercept = c(0.01,0.05,0.1),linetype=2) + 
-          geom_point(data = pointData, aes(x = meanFDR, y = meanTPR,size=2,shape=as.factor(fill_shape),stroke=1)) + 
-          scale_shape_manual(values=c(1,19)) + 
-          theme_bw(base_size = 11) + 
-      theme(axis.text.x = element_text(angle = 90, size = 9),
-            axis.text.y = element_text(size = 9),
-            axis.title.x = element_text(size = 9),
-            axis.title.y = element_text(size = 9),
-            legend.position="bottom",
-            plot.title = element_text(size=12)) + 
-      guides(size = FALSE, shape = FALSE) +
-      guides(col = guide_legend(nrow = 1))
-    
-    } else {
-    
-        pMeanAll <- ggplot(df, aes(x=meanFDR, y=meanTPR, col=method)) +
-          geom_line(size=0.75) +
-          scale_x_continuous(limits = c(0, 0.4), breaks = c(0.01, 0.05, 0.1),
-                   minor_breaks = c(0:5) * .1) +
-          scale_y_continuous(limits = c(0.4, 1)) + 
-          xlab("FDR") + 
-          ylab("TPR") + 
-          geom_ribbon(aes(ymin=meanTPR-sdTPR,ymax=meanTPR+sdTPR,fill=method), alpha=0.2) +
-          #scale_color_manual(values=c("olivedrab4","blue","cyan3","purple","black","grey34")) + 
-          #scale_fill_manual(values=c("olivedrab4","blue","cyan3","purple","black","grey34")) +
-          scale_color_manual(values=c("olivedrab4","black")) + 
-          scale_fill_manual(values=c("olivedrab4","black")) +
-          ggtitle(selection[j]) + 
-          geom_vline(xintercept = c(0.01,0.05,0.1),linetype=2) + 
-          geom_point(data = pointData, aes(x = meanFDR, y = meanTPR,size=2,shape=as.factor(fill_shape),stroke=1)) + 
-          scale_shape_manual(values=c(1,19)) + 
-          theme_bw(base_size = 11) + 
-      theme(axis.text.x = element_text(angle = 90, size = 9),
-            axis.text.y = element_text(size = 9),
-            axis.title.x = element_text(size = 9),
-            axis.title.y = element_text(size = 9),
-            legend.position="bottom",
-            plot.title = element_text(size=12)) + 
-      guides(size = FALSE, shape = FALSE) +
-      guides(col = guide_legend(nrow = 1))
-  }
-
-    # png(paste("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/new_analysis/Results/Tasic_benchmark/plot_select_", selection2[j], "_", sub("^[^f]*", "", selection[j]), ".png", sep = ""), 
-    #       width     = 5.5,
-    #       height    = 4.5,
-    #       units     = "in",
-    #       res       = 200,
-    #       pointsize = 4) # start export
-    print(pMeanAll)
-    # dev.off()
+        # png(paste("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/new_analysis/Results/Tasic_benchmark/plot_icobra_scaled_TPM_", selection2[j], "_", sub("^[^f]*", "", selection[j]), ".png", sep = ""),
+        #     width     = 5.5,
+        #     height    = 4.5,
+        #     units     = "in",
+        #     res       = 200,
+        #     pointsize = 4) # start export
+      print(plot)
+      # dev.off()
   }
 }
 ```
 
-```
-dataset=TasicBenchmark
-nFilters=2
-nSampleSizes=1
-nRep=c("rep_1","rep_2","rep_3")
-nmethods=2
-```
 
 ```{r}
 selection <- c("20_rep_._filterLenient","20_rep_._filterStringent")
 selection2 <- c("20_rep","20_rep")
 
-visualize_datasets(dataset=TasicBenchmark,metaInfo=metaInfo,nFilters=2,nSampleSizes=1,nRep=c("rep_1","rep_2","rep_3"),nmethods=7,selection = selection,selection2=selection2)
-```
+visualize_datasets(dataset=TasicBenchmark,metaInfo=metaInfo,nFilters=2,nSampleSizes=1,nRep=c("rep_1","rep_2","rep_3"),nmethods=6,selection = selection,selection2=selection2)
 
-```{r}
 selection <- c("_75_rep_._filterLenient","200_rep_._filterLenient","_75_rep_._filterStringent","200_rep_._filterStringent")
 selection2 <- c("75_rep","200_rep","75_rep","200_rep")
 
-visualize_datasets(TasicBenchmark,metaInfo,nFilters=2,nSampleSizes=2,nRep=c("rep_1","rep_2","rep_3"),nmethods=5,selection = selection,selection2=selection2)
+visualize_datasets(TasicBenchmark,metaInfo,nFilters=2,nSampleSizes=2,nRep=c("rep_1","rep_2","rep_3"),nmethods=4,selection = selection,selection2=selection2)
 ```
+
 
