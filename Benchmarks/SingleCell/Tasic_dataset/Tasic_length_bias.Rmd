@@ -1,0 +1,205 @@
+---
+title: "Tasic_length_bias"
+output: html_document
+---
+
+Length bias analysis for the count dataset
+
+```{r}
+library(grid)
+library(gridExtra)
+library(ggplot2)
+library(rtracklayer)
+library(IsoformSwitchAnalyzeR)
+```
+
+```{r}
+#load('01_Tasic_benchmark_data_count_20200907.Rdata')
+load('01_Tasic_benchmark_data_scaledTPM_20200907.Rdata')
+names(TasicBenchmarkLenient)
+
+metaInfo <- c(TasicBenchmarkLenient,TasicBenchmarkStringent)
+names(metaInfo)
+
+#load(file='02_Tasic_DTU_analysis_full_count_20200907.Rdata')
+load('02_Tasic_DTU_analysis_full_scaledTPM_20200907.Rdata')
+    
+TasicBenchmark_count <- c(
+    TasicDtuBenchmark_DEXSeq,
+    TasicDtuBenchmark_DoubleExpSeq,
+    TasicDtuBenchmark_DRIMSeq,
+    TasicDtuBenchmark_edgeRdiffsplice,
+    TasicDtuBenchmark_limmaDiffsplice,
+    TasicDtuBenchmark_quasiBinomial)
+
+TasicBenchmark_count  <- TasicBenchmark_count[which(
+        sapply(TasicBenchmark_count, function(x) ! is.null(x$dtuAnalysis))
+)]
+
+rm(TasicBenchmarkLenient,
+   TasicBenchmarkStringent,
+   TasicDtuBenchmark_quasiBinomial,
+   TasicDtuBenchmark_limmaDiffsplice,
+   TasicDtuBenchmark_edgeRdiffsplice,
+   TasicDtuBenchmark_DoubleExpSeq,
+   TasicDtuBenchmark_DEXSeq,
+   TasicDtuBenchmark_DRIMSeq)
+gc()
+```
+
+Get isoform length information
+
+```{r}
+gtf_m <- rtracklayer::import("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Case_study_L5It/Mus_musculus.GRCm38.98.gtf")
+gtf_m <- gtf_m[which(gtf_m$type == 'exon'),]
+
+isoformLengths <- sapply(
+    X = split(
+        x = gtf_m@ranges@width,
+        f = gtf_m$transcript_id
+    ),
+    FUN = sum
+)
+
+txs_len <- isoformLengths
+names(txs_len) <- sub("\\..*", "", names(isoformLengths))
+```
+
+Compute transcript length bias for each method in each dataset with all 6 methods
+
+```{r}
+resList <- list()
+
+# loop over datasets
+for (current_dataset in names(metaInfo)[c(1,2,3,10,11,12)]) {
+  
+  # select current dataset
+  TasicBenchmark_count_current <- TasicBenchmark_count[grepl(current_dataset,names(TasicBenchmark_count))]
+  metaInfo_current <- metaInfo[grepl(current_dataset,names(metaInfo))]
+  
+  # select transcripts in current dataset
+  txs_len_current <- txs_len[which(names(txs_len) %in% sub("\\..*", "", metaInfo_current[[1]]$metaInfo$TXNAME))]
+  txs_len_current <- txs_len_current[unique(names(txs_len_current))]
+  
+  # define "long" trascript as longer than median
+  long <- ifelse(txs_len_current>median(txs_len_current),"yes","no")
+  
+  # For DoubleExpSeq, FDRs must still be calculated
+  TasicBenchmark_count_current[[2]]$dtuAnalysis$FDR <- p.adjust(TasicBenchmark_count_current[[2]]$dtuAnalysis$p_value, method = "BH")
+
+  # get results for each of the methods
+  ### start getting result
+  stats <- c()
+  pvalues <- c()
+  
+  for (i in 1:length(TasicBenchmark_count_current)) {
+      method_result <- ifelse(TasicBenchmark_count_current[[i]]$dtuAnalysis$FDR <= 0.05, "yes", "no")
+      names(method_result) <- sub("\\..*", "", TasicBenchmark_count_current[[i]]$dtuAnalysis$TXNAME)
+      
+      method_result <- method_result[match(names(long),names(method_result))]
+      
+      method_test <- fisher.test(table(long,method_result))
+      stats <- c(stats,method_test$estimate)
+      pvalues <- c(pvalues,method_test$p.value)
+
+  }
+  
+  # wrangle results
+  methods <- c("DEXSeq","DoubleExpSeq","DRIMSeq","edgeR_diffsplice","limma_diffsplice","qbDTU")
+  
+  current_result <- data.frame(cbind(methods,stats,pvalues))
+  colnames(current_result) <- c("method","stats","pvalues")
+
+  current_result$method <- as.factor(current_result$method)
+  current_result$stats <- as.numeric(current_result$stats)
+  current_result$pvalues <- as.numeric(current_result$pvalues)
+  rownames(current_result) <- 1:nrow(current_result)
+  
+  # save result in list
+  resList[[current_dataset]] <- current_result
+}
+```
+
+
+```{r}
+# loop over datasets
+for (current_dataset in names(metaInfo)[c(4,5,6,7,8,9,13,14,15,16,17,18)]) {
+  
+  # select current dataset
+  TasicBenchmark_count_current <- TasicBenchmark_count[grepl(current_dataset,names(TasicBenchmark_count))]
+  metaInfo_current <- metaInfo[grepl(current_dataset,names(metaInfo))]
+  
+  # select transcripts in current dataset
+  txs_len_current <- txs_len[which(names(txs_len) %in% sub("\\..*", "", metaInfo_current[[1]]$metaInfo$TXNAME))]
+  txs_len_current <- txs_len_current[unique(names(txs_len_current))]
+  
+  # define "long" trascript as longer than median
+  long <- ifelse(txs_len_current>median(txs_len_current),"yes","no")
+  
+  # For DoubleExpSeq, FDRs must still be calculated
+  TasicBenchmark_count_current[[1]]$dtuAnalysis$FDR <- p.adjust(TasicBenchmark_count_current[[1]]$dtuAnalysis$p_value, method = "BH")
+
+  # get results for each of the methods
+  ### start getting result
+  stats <- c()
+  pvalues <- c()
+  
+  for (i in 1:length(TasicBenchmark_count_current)) {
+      method_result <- ifelse(TasicBenchmark_count_current[[i]]$dtuAnalysis$FDR <= 0.05, "yes", "no")
+      names(method_result) <- sub("\\..*", "", TasicBenchmark_count_current[[i]]$dtuAnalysis$TXNAME)
+      
+      method_result <- method_result[match(names(long),names(method_result))]
+      
+      method_test <- fisher.test(table(long,method_result))
+      stats <- c(stats,method_test$estimate)
+      pvalues <- c(pvalues,method_test$p.value)
+
+  }
+  
+  # wrangle results
+  methods <- c("DoubleExpSeq","edgeR_diffsplice","limma_diffsplice","qbDTU")
+  
+  current_result <- data.frame(cbind(methods,stats,pvalues))
+  colnames(current_result) <- c("method","stats","pvalues")
+
+  current_result$method <- as.factor(current_result$method)
+  current_result$stats <- as.numeric(current_result$stats)
+  current_result$pvalues <- as.numeric(current_result$pvalues)
+  rownames(current_result) <- 1:nrow(current_result)
+  
+  # save result in list
+  resList[[current_dataset]] <- current_result
+}
+```
+
+
+
+
+```{r}
+analyses <- c("20_rep_._filterLenient","75_rep_._filterLenient","200_rep_._filterLenient","20_rep_._filterStringent","75_rep_._filterStringent","200_rep_._filterStringent")
+
+plotList <- list()
+
+for (analysis in analyses) {
+  
+  current_analysis <- resList[grepl(analysis,names(resList))]
+
+  gg <- ggplot(data = current_analysis[[1]],mapping=aes(x=stats,y=method,color=ifelse(pvalues<0.05, "red", "black"))) +
+      scale_color_identity() +
+      geom_point() +
+      geom_point(data = current_analysis[[2]], mapping = aes(x=stats,y=method)) +
+      geom_point(data = current_analysis[[3]], mapping = aes(x=stats,y=method)) +
+      theme_bw() +
+      ggtitle(analysis)
+  
+  plotList[[analysis]] <- gg
+}
+png("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Results/Tasic_benchmark/plot_scaledTPM_lengthBias.png",
+    width     = 12,
+    height    = 8,
+    units     = "in",
+    res       = 200,
+    pointsize = 4) # start export
+do.call(grid.arrange, c(plotList, ncol=3))
+dev.off()
+```
