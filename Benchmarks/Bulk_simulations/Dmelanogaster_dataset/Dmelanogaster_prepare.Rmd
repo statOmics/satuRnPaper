@@ -1,0 +1,168 @@
+---
+title: "Dmelanogaster_ECC_prepare_raw"
+output: html_document
+---
+
+```{r}
+library(tximport)
+library(BANDITS)
+library(DRIMSeq)
+library(edgeR)
+```
+
+```{r}
+data_dir <- "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Bulk_simulations/Dmelanogaster_dataset_ECC/data/quant/"
+
+sample_names <- c("output_01","output_02","output_03","output_04","output_05","output_06","output_07","output_08","output_09","output_10")
+
+quant_files <- file.path(data_dir, sample_names, "abundance.h5")
+file.exists(quant_files)
+
+txi <- tximport(files = quant_files, type = "kallisto", countsFromAbundance = "no", txOut = TRUE)
+#txi <- tximport(files = quant_files, type = "kallisto", countsFromAbundance = "scaledTPM", txOut = TRUE)
+
+myDesign <- data.frame(sample_id = sample_names,
+                            condition = rep(c("group1","group2"),each=5))
+
+myDesign$sample_id <- as.character(myDesign$sample_id)
+myDesign$condition <- as.character(myDesign$condition)
+
+colnames(txi$counts) <- myDesign$sample_id
+Dm_counts <- txi$counts
+dim(Dm_counts)
+
+eff_len <- eff_len_compute(x_eff_len = txi$length)
+saveRDS(eff_len, "eff_len.Rds")
+```
+
+Load data Dmelanogaster
+```{r}
+truth <- read.table(file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Dmelanogaster_Data/truth_Dmelanogaster.txt", sep = "\t", header = TRUE)
+
+dim(truth)
+
+conversion <- read.table(file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Dmelanogaster_Data/TranscriptID_conversion.txt")
+
+colnames(conversion) <- c("target_id", "transcript_id")
+conversion$target_id <- as.character(conversion$target_id)
+conversion$transcript_id <- as.character(conversion$transcript_id)
+```
+
+```{r}
+txInfo <- as.data.frame(cbind(as.character(truth$gene_id), as.character(truth$transcript_id), as.character(truth$transcript_ds_status)))
+
+colnames(txInfo) <- c("gene_id", "transcript_id", "gene_modified")
+txInfo$gene_id <- as.character(txInfo$gene_id)
+txInfo$transcript_id <- as.character(txInfo$transcript_id)
+txInfo <- txInfo[,c(2,1,3)] # change order in same way as other benchmarks
+```
+
+```{r}
+Dm_counts <- Dm_counts[which(rownames(Dm_counts) %in% txInfo$transcript_id),]
+dim(Dm_counts)
+```
+
+
+Lenient filtering
+
+```{r}
+Dm_lenient <- Dm_counts
+txInfo_lenient <- txInfo
+
+group <- as.factor(rep(c(0,1),each=5))
+design <- model.matrix(~group)
+sampleData <- design
+sampleData[,1] <- colnames(Dm_lenient)
+colnames(sampleData) <- c("sample_id", "condition")
+
+Dm_lenient <- edgeR::DGEList(counts = Dm_lenient,group=group)
+filter <- edgeR::filterByExpr(Dm_lenient,design=design) 
+            
+Dm_lenient <- Dm_lenient$counts[filter,]
+
+## Reorder corresponding info
+txInfo_lenient <- txInfo_lenient[match(
+    rownames(Dm_lenient), txInfo_lenient$transcript_id
+),]
+
+## Filter out genes with one TX
+txInfo_lenient <- txInfo_lenient[txInfo_lenient$gene_id %in% names(table(txInfo_lenient$gene_id))[table(txInfo_lenient$gene_id) > 1],]
+
+Dm_lenient <- Dm_lenient[txInfo_lenient$transcript_id,]
+
+## add column with sample size for easy retrieval
+txInfo_lenient$nrSamplesPerCondition <- 5
+
+colnames(txInfo_lenient) <- c('TXNAME','GENEID','gene_modified','nrSamplesPerCondition')
+
+DmBenchmarkLenient <- list(
+            data     = Dm_lenient,
+            design   = as.data.frame(sampleData),
+            metaInfo = txInfo_lenient
+)
+
+dim(Dm_lenient)
+```
+
+Stringent filtering
+
+```{r}
+Dm_stringent <- Dm_counts
+txInfo_stringent <- txInfo
+group <- as.factor(rep(c(0,1),each=5))
+design <- model.matrix(~group)
+sampleData <- design
+sampleData[,1] <- colnames(Dm_stringent)
+colnames(sampleData) <- c("sample_id", "condition")
+
+geneForEachTx <- txInfo_stringent[match(rownames(Dm_stringent),txInfo$transcript_id),"gene_id"]
+
+Dm_stringent <- as.data.frame(Dm_stringent)
+
+Dm_stringent$gene_id <- geneForEachTx
+Dm_stringent$feature_id <- row.names(Dm_stringent)
+
+d <- DRIMSeq::dmDSdata(counts = Dm_stringent, samples = as.data.frame(sampleData))
+d <- dmFilter(d,
+              min_samps_feature_expr=5, 
+              min_feature_expr=10, 
+              min_samps_feature_prop=5, 
+              min_feature_prop=0.1,
+              min_samps_gene_expr=10, 
+              min_gene_expr=10
+              )
+
+Dm_stringent <- Dm_counts[counts(d)$feature_id,]
+
+## Reorder corresponding info
+txInfo_stringent <- txInfo_stringent[match(
+    rownames(Dm_stringent), txInfo_stringent$transcript_id
+),]
+
+## Filter out genes with one TX
+txInfo_stringent <- txInfo_stringent[txInfo_stringent$gene_id %in% names(table(txInfo_stringent$gene_id))[table(txInfo_stringent$gene_id) > 1],]
+
+Dm_stringent <- Dm_stringent[txInfo_stringent$transcript_id,]
+
+## add truth column
+txInfo_stringent$gene_modified <- truth$transcript_ds_status[match(txInfo_stringent$transcript_id,as.character(truth$transcript_id))]
+
+## add column with sample size for easy retrieval
+txInfo_stringent$nrSamplesPerCondition <- 5
+
+colnames(txInfo_stringent) <- c('TXNAME','GENEID','gene_modified','nrSamplesPerCondition')
+
+DmBenchmarkStringent <- list(
+            data     = Dm_stringent,
+            design   = as.data.frame(sampleData),
+            metaInfo = txInfo_stringent
+)
+
+dim(DmBenchmarkStringent$data)
+```
+
+```{r}
+save(DmBenchmarkLenient, DmBenchmarkStringent, file='01_Dmelanogaster_benchmark_data_ECC_count.Rdata')
+save(DmBenchmarkLenient, DmBenchmarkStringent, file='01_Dmelanogaster_benchmark_data_ECC_tpm.Rdata')
+```
+

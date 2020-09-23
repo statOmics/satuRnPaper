@@ -1,0 +1,164 @@
+---
+title: "Dmelanogaster_length_bias"
+output: html_document
+---
+
+Length bias analysis for the count dataset
+
+```{r}
+library(grid)
+library(gridExtra)
+library(ggplot2)
+library(rtracklayer)
+library(IsoformSwitchAnalyzeR)
+```
+
+```{r}
+#load(file='01_Dmelanogaster_benchmark_data_ECC_count.Rdata')
+load(file='01_Dmelanogaster_benchmark_data_ECC_tpm.Rdata')
+
+metaInfo <- c(DmBenchmarkLenient,DmBenchmarkStringent)
+
+DmBenchmarkLenient <- list(DmBenchmarkLenient)
+DmBenchmarkStringent <- list(DmBenchmarkStringent)
+
+### Combine
+names(DmBenchmarkLenient)   <- paste0(names(DmBenchmarkLenient)  , 'filterLenient')
+names(DmBenchmarkStringent) <- paste0(names(DmBenchmarkStringent), 'filterStringent')
+
+metaInfo <- c(
+    DmBenchmarkLenient,
+    DmBenchmarkStringent
+)
+
+#load('02_Dmelanogaster_benchmark_DTU_analysis_ECC_count.Rdata')
+load('02_Dmelanogaster_benchmark_DTU_analysis_ECC_tpm.Rdata')
+    
+DmBenchmark_count <- c(
+   DmDtuBenchmark_DEXSeq,
+   DmDtuBenchmark_DoubleExpSeq,
+   DmDtuBenchmark_DRIMSeq,
+   DmDtuBenchmark_edgeRdiffsplice,
+   DmDtuBenchmark_limmaDiffsplice,
+   DmDtuBenchmark_NBSplice,
+   DmDtuBenchmark_quasiBinomial)
+
+DmBenchmark_count  <- DmBenchmark_count[which(
+        sapply(DmBenchmark_count, function(x) ! is.null(x$dtuAnalysis))
+)]
+
+rm(DmBenchmarkLenient,
+   DmBenchmarkStringent,
+   DmDtuBenchmark_DEXSeq,
+   DmDtuBenchmark_DoubleExpSeq,
+   DmDtuBenchmark_DRIMSeq,
+   DmDtuBenchmark_edgeRdiffsplice,
+   DmDtuBenchmark_limmaDiffsplice,
+   DmDtuBenchmark_NBSplice,
+   DmDtuBenchmark_quasiBinomial)
+gc()
+```
+
+Get isoform length information (human)
+
+```{r}
+gtf_d <- rtracklayer::import("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Dmelanogaster_data/Drosophila_melanogaster.BDGP5.70.gtf.gz")
+gtf_d <- gtf_d[which(gtf_d$type == 'exon'),]
+
+isoformLengths <- sapply(
+    X = split(
+        x = gtf_d@ranges@width,
+        f = gtf_d$transcript_id
+    ),
+    FUN = sum
+)
+
+txs_len <- isoformLengths
+names(txs_len) <- sub("\\..*", "", names(isoformLengths))
+```
+
+Compute transcript length bias for each method in each dataset
+
+```{r}
+resList <- list()
+
+# loop over datasets
+for (current_dataset in names(metaInfo)) {
+  
+  # select current dataset
+  DmBenchmark_count_current <- DmBenchmark_count[grepl(current_dataset,names(DmBenchmark_count))]
+  metaInfo_current <- metaInfo[grepl(current_dataset,names(metaInfo))]
+  
+  # select transcripts in current dataset
+  txs_len_current <- txs_len[which(names(txs_len) %in% sub("\\..*", "", metaInfo_current[[1]]$metaInfo$TXNAME))]
+  txs_len_current <- txs_len_current[unique(names(txs_len_current))]
+  
+  # define "long" trascript as longer than median
+  long <- ifelse(txs_len_current>median(txs_len_current),"yes","no")
+  
+  # For DoubleExpSeq and NBSplice, FDRs must still be calculated
+  DmBenchmark_count_current[[2]]$dtuAnalysis$FDR <- p.adjust(DmBenchmark_count_current[[2]]$dtuAnalysis$p_value, method = "BH")
+  DmBenchmark_count_current[[6]]$dtuAnalysis$FDR <- p.adjust(DmBenchmark_count_current[[6]]$dtuAnalysis$p_value, method = "BH")
+
+  # get results for each of the methods
+  ### start getting result
+  stats <- c()
+  pvalues <- c()
+  
+  for (i in 1:length(DmBenchmark_count_current)) {
+
+      method_result <- ifelse(DmBenchmark_count_current[[i]]$dtuAnalysis$FDR <= 0.05, "yes", "no")
+      names(method_result) <- sub("\\..*", "", DmBenchmark_count_current[[i]]$dtuAnalysis$TXNAME)
+      
+      method_result <- method_result[match(names(long),names(method_result))]
+      
+      method_test <- fisher.test(table(long,method_result))
+      stats <- c(stats,method_test$estimate)
+      pvalues <- c(pvalues,method_test$p.value)
+
+  }
+  
+  # wrangle results
+  methods <- c("DEXSeq","DoubleExpSeq","DRIMSeq","edgeR_diffsplice","limma_diffsplice","NBSplice","qbDTU")
+  
+  current_result <- data.frame(cbind(methods,stats,pvalues))
+  colnames(current_result) <- c("method","stats","pvalues")
+
+  current_result$method <- as.factor(current_result$method)
+  current_result$stats <- as.numeric(current_result$stats)
+  current_result$pvalues <- as.numeric(current_result$pvalues)
+  rownames(current_result) <- 1:nrow(current_result)
+  
+  # save result in list
+  resList[[current_dataset]] <- current_result
+}
+```
+
+Plot performances
+
+```{r}
+analyses <- c("filterLenient","filterStringent")
+
+plotList <- list()
+
+for (analysis in analyses) {
+  
+  current_analysis <- resList[grepl(analysis,names(resList))]
+
+  gg <- ggplot(data = current_analysis[[1]],mapping=aes(x=stats,y=method,color=ifelse(pvalues<0.05, "red", "black"))) +
+      scale_color_identity() +
+      geom_point() +
+      theme_bw() +
+      ggtitle(analysis)
+  
+  plotList[[analysis]] <- gg
+}
+png("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Results/Dmelanogaster_benchmark/plot_scaledTPM_lengthBias.png",
+    width     = 8,
+    height    = 5,
+    units     = "in",
+    res       = 200,
+    pointsize = 4) # start export
+do.call(grid.arrange, c(plotList, ncol=2))
+dev.off()
+```
