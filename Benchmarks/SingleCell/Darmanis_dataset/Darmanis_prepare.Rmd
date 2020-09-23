@@ -1,0 +1,353 @@
+---
+title: "Darmanis_prepare"
+output: html_document
+---
+
+```{r,message=FALSE}
+library(edgeR)
+library(DRIMSeq)
+library(MultiAssayExperiment)
+```
+
+Must still add how the files below were obtained
+
+```{r, message=FALSE}
+### Files downloaded from
+# http://imlspenticton.uzh.ch/robinson_lab/conquer/data-mae/GSE84465.rds
+# http://people.binf.ku.dk/rtl144/dtu/80_1_darmanis_cells_of_interest.Rdata
+# ftp://ftp.ensembl.org/pub/release-84/gtf/homo_sapiens/Homo_sapiens.GRCh38.84.chr_patch_hapl_scaff.gtf.gz
+
+### Load data
+load(file='/Volumes/ExternalDrive/DTU_project/Data/Darmanis/80_1_darmanis_cells_of_interest.Rdata')
+# cellsOfInterest --> immune cells of tsne cluster 8 (originating from different patients though)
+darmaniEtAl <- readRDS('/Volumes/ExternalDrive/DTU_project/Data/Darmanis/GSE84465.rds')
+```
+
+```{r}
+### Extract gene info
+txInfo <- darmaniEtAl@ExperimentList$tx@rowRanges
+txInfo <- as.data.frame(mcols(txInfo[,c('transcript','gene')]))
+colnames(txInfo) <- c('isoform_id','gene_id')
+rownames(txInfo) <- NULL
+txInfo$isoform_id <- as.character(txInfo$isoform_id)
+txInfo$gene_id <- as.character(txInfo$gene_id)
+
+### Subset expression matrix
+darmaniCM <- darmaniEtAl@ExperimentList$tx@assays$data$count[,cellsOfInterest] # count input
+darmaniTPM <- darmaniEtAl@ExperimentList$tx@assays$data$TPM[,cellsOfInterest] # TPM input
+
+# get scaledTPM
+colsums_count <- colSums(darmaniCM)
+colsums_TPM <- colSums(darmaniTPM)
+scale_factors <- colsums_count/colsums_TPM
+
+dim(diag(scale_factors))
+dim(darmaniTPM)
+
+darmaniScaledTPM <- darmaniTPM %*% diag(scale_factors) # scaledTPM input
+colnames(darmaniScaledTPM) <- colnames(darmaniCM)
+
+### Remove ERCC
+txInfo <- txInfo[which(
+    ! grepl('^ERCC-', txInfo$isoform_id )
+),]
+
+darmaniCM <- darmaniCM[txInfo$isoform_id,]
+darmaniScaledTPM <- darmaniScaledTPM[txInfo$isoform_id,]
+
+### Set parameters
+samplesPrCondition   <- c(20,50,100)
+nrRepsMade           <- 3
+fracGenesAffected    <- 0.15
+nrCoresToUse         <- 2
+
+### Set up parallel processing
+if(nrCoresToUse != 1) {
+    doParallel <- TRUE
+    doProgress <- 'none'
+
+    library(doMC)
+    registerDoMC(cores = nrCoresToUse)
+} else {
+    doParallel <- FALSE
+    doProgress <- 'text'
+}
+
+### list for looping
+nrRepList <- split(
+    rep(
+        x = samplesPrCondition,
+        times = nrRepsMade
+    ),
+    paste0(
+        'samples_used_',
+        rep(
+            x = samplesPrCondition,
+            times = nrRepsMade
+        ),
+        '_rep_',
+        sort( rep(
+            x = 1:nrRepsMade,
+            times = length(samplesPrCondition)
+        ) )
+    )
+)
+
+### Sanity check
+length(nrRepList) == length(samplesPrCondition) * nrRepsMade
+table(sapply(nrRepList, length))
+```
+
+Generate lenient benchmark
+
+```{r}
+# if scaledTPM input wanted, set darmaniCM <- darmaniScaledTPM
+darmaniCM <- darmaniScaledTPM
+
+DarmanisBenchmarkLenient <- lapply(c(1:length(nrRepList)), function(x) {
+      
+    ### Step 1: Extract random sub-sample of correct size
+    set.seed(x)
+    localSampleSize <- nrRepList[[x]]
+
+    if(TRUE) {
+        localSubset <- sample(
+            colnames(darmaniCM),
+            localSampleSize * 2
+        )
+
+        localDesign <- data.frame(
+            sample_id = localSubset,
+            condition = c(
+                rep('a',floor  ( length(localSampleSize) )),
+                rep('b',ceiling( length(localSampleSize) ))
+            ),
+            stringsAsFactors = FALSE
+        )
+        localDesign <- localDesign[sort.list(localDesign$condition),]
+    }
+      
+        ### Step 2: Subset to expressed features using edgeR::filterByExpr
+        if(TRUE) {
+            
+            y <- edgeR::DGEList(counts = darmaniCM[,localDesign$sample_id])
+            design <- model.matrix(~condition, data=localDesign)
+            
+            filter <- edgeR::filterByExpr(y,design=design,min.prop=0.5,min.count=1,min.total.count = 0,large.n=0) 
+            
+            localCm <- y$counts[filter,]
+            ## Get only multi-isoform genes (after filtering)
+            localTx <- txInfo[which(
+                txInfo$isoform_id %in% rownames(localCm)),]
+            
+            tmp <- table(localTx$gene_id)
+            tmp <- tmp[which( tmp >= 2)]
+        
+            localTx <- localTx[which(localTx$gene_id %in% names(tmp)),]
+            localCm <- localCm[which(rownames(localCm) %in% localTx$isoform_id),]
+        }
+
+        ### Step 3: Extract isoforms to modify
+        if(TRUE) {
+            genesToModify <- sample(
+                x = unique(localTx$gene_id),
+                size = round(
+                    length(unique(localTx$gene_id)) * fracGenesAffected
+                )
+            )
+            
+            samplesToModify <- localDesign$sample_id[which(
+                localDesign$condition == 'b')
+                ]
+            
+            cm_swapped <- localCm
+            
+            transcripts_toSwap_current <- c()
+            transcripts_swapped_current <- c()
+            transcripts_swapped_all <- c()
+            transcripts_toSwap_all <- c()
+
+            for (gene in genesToModify) {
+
+                current <- localTx[which(localTx$gene_id==gene),]
+                nSwap <- max(2,rbinom(1,nrow(current),1/3))
+  
+                transcripts_toSwap_current <- sample(
+                    x = current$isoform_id,
+                    size = nSwap)
+  
+                ## swap order of txs completely by putting the fist one last
+                transcripts_swapped_current <- c(transcripts_toSwap_current[-1],transcripts_toSwap_current[1])
+                
+                ## Add to swapping queue
+                transcripts_swapped_all <- c(transcripts_swapped_all,transcripts_swapped_current)
+                transcripts_toSwap_all <- c(transcripts_toSwap_all,transcripts_toSwap_current)
+            }
+        
+        ## Perform the swapping in matrix
+        cm_swapped[transcripts_toSwap_all,which(colnames(cm_swapped)%in%samplesToModify)] <- cm_swapped[transcripts_swapped_all,which(colnames(cm_swapped)%in%samplesToModify)]
+      
+        ## Set swapping in localTx
+        localTx$txSwapped <- vector(length=nrow(localTx))
+        localTx[which(localTx$isoform_id %in% transcripts_swapped_all),"txSwapped"] <- TRUE 
+        localTx$nrSamplesPerCondition <- localSampleSize
+        }
+    
+        colnames(localTx) <- c('TXNAME','GENEID','txSwapped','nrSamplesPerCondition')
+
+        ### Combine data
+        dataList <- list(
+            data     = cm_swapped,
+            design   = localDesign,
+            metaInfo = localTx
+        )
+        return(dataList)
+    }
+    
+)
+
+names(DarmanisBenchmarkLenient) <- paste0(names(nrRepList),"_filterLenient")
+```
+
+```{r}
+for (i in 1:length(DarmanisBenchmarkLenient)) {
+  print(dim(DarmanisBenchmarkLenient[[i]]$data))
+}
+```
+
+Generate Stringent benchmark
+
+```{r}
+DarmanisBenchmarkStringent <- lapply(c(1:length(nrRepList)), function(x) {
+      
+    ### Step 1: Extract random sub-sample of correct size
+    set.seed(x)
+    localSampleSize <- nrRepList[[x]]
+
+    if(TRUE) {
+        localSubset <- sample(
+            colnames(darmaniCM),
+            localSampleSize * 2
+        )
+
+        localDesign <- data.frame(
+            sample_id = localSubset,
+            condition = c(
+                rep('a',floor  ( length(localSampleSize) )),
+                rep('b',ceiling( length(localSampleSize) ))
+            ),
+            stringsAsFactors = FALSE
+        )
+        localDesign <- localDesign[sort.list(localDesign$condition),]
+    }
+      
+        ### Step 2: Subset to expressed features using DRIMSeq::dmFilter
+        if(TRUE) {
+          
+          localCm <-  as.data.frame(darmaniCM[,localDesign$sample_id])
+          
+          geneForEachTx <- txInfo[match(rownames(localCm),txInfo[,"isoform_id"]),"gene_id"]
+
+          localCm$gene_id <- geneForEachTx
+          localCm$feature_id <- row.names(localCm)
+
+          d <- DRIMSeq::dmDSdata(counts = localCm, samples = localDesign)
+
+          d_filter <- dmFilter(d,
+                min_samps_feature_expr=localSampleSize/2, min_feature_expr=10, min_samps_feature_prop=localSampleSize/2, min_feature_prop=0.1,
+                min_samps_gene_expr=localSampleSize, min_gene_expr=10)
+
+          localCm <- darmaniCM[counts(d_filter)$feature_id,localDesign$sample_id]
+
+          ## Get only multi-isoform genes (after filtering)
+          localTx <- txInfo[which(
+              txInfo$isoform_id %in% rownames(localCm)),]
+          
+          tmp <- table(localTx$gene_id)
+          tmp <- tmp[which( tmp >= 2)]
+        
+          localTx <- localTx[which(localTx$gene_id %in% names(tmp)),]
+          localCm <- localCm[which(rownames(localCm) %in% localTx$isoform_id),]
+        }
+
+        ### Step 3: Extract isoforms to modify
+        if(TRUE) {
+            genesToModify <- sample(
+                x = unique(localTx$gene_id),
+                size = round(
+                    length(unique(localTx$gene_id)) * fracGenesAffected
+                )
+            )
+            
+            samplesToModify <- localDesign$sample_id[which(
+                localDesign$condition == 'b')
+                ]
+            
+            cm_swapped <- localCm
+            
+            transcripts_toSwap_current <- c()
+            transcripts_swapped_current <- c()
+            transcripts_swapped_all <- c()
+            transcripts_toSwap_all <- c()
+
+            for (gene in genesToModify) {
+
+                current <- localTx[which(localTx$gene_id==gene),]
+                nSwap <- max(2,rbinom(1,nrow(current),1/3))
+  
+                transcripts_toSwap_current <- sample(
+                    x = current$isoform_id,
+                    size = nSwap)
+  
+                ## swap order of txs completely by putting the fist one last
+                transcripts_swapped_current <- c(transcripts_toSwap_current[-1],transcripts_toSwap_current[1])
+                
+                ## Add to swapping queue
+                transcripts_swapped_all <- c(transcripts_swapped_all,transcripts_swapped_current)
+                transcripts_toSwap_all <- c(transcripts_toSwap_all,transcripts_toSwap_current)
+            }
+        
+        ## Perform the swapping in matrix
+        cm_swapped[transcripts_toSwap_all,which(colnames(cm_swapped)%in%samplesToModify)] <- cm_swapped[transcripts_swapped_all,which(colnames(cm_swapped)%in%samplesToModify)]
+      
+        ## Set swapping in localTx
+        localTx$txSwapped <- vector(length=nrow(localTx))
+        localTx[which(localTx$isoform_id %in% transcripts_swapped_all),"txSwapped"] <- TRUE 
+        localTx$nrSamplesPerCondition <- localSampleSize
+        }
+    
+        colnames(localTx) <- c('TXNAME','GENEID','txSwapped','nrSamplesPerCondition')
+
+        ### Combine data
+        dataList <- list(
+            data     = cm_swapped,
+            design   = localDesign,
+            metaInfo = localTx
+        )
+
+        return(dataList)
+    }
+    
+)
+
+names(DarmanisBenchmarkStringent) <- paste0(names(nrRepList),"_filterStringent")
+```
+
+```{r}
+for (i in 1:length(DarmanisBenchmarkStringent)) {
+  print(dim(DarmanisBenchmarkStringent[[i]]$data))
+}
+```
+
+```{r}
+#save(DarmanisBenchmarkLenient, DarmanisBenchmarkStringent, file='01_Darmanis_benchmark_data.Rdata')
+save(DarmanisBenchmarkLenient, DarmanisBenchmarkStringent, file='c')
+```
+
+
+
+
+
+
+
+
