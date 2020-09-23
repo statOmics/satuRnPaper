@@ -42,7 +42,7 @@ if(TRUE) {
     invisible(gc())
 }
 
-truth_file <- read.table("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Hsapiens_data/3_truth/truth_Hsapiens.txt",header = TRUE)
+truth_file <- read.table("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Hsapiens_data/truth_Hsapiens.txt",header = TRUE)
 ```
 
 ```{r}
