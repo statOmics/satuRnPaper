@@ -1,0 +1,253 @@
+---
+title: "Tasic_analysis_L5IT"
+output: html_document
+---
+
+# Load libraries
+
+```{r,message=FALSE}
+## for data import
+library(AnnotationHub)
+library(ensembldb)
+library(openxlsx)
+
+## for analysis
+library(qbDTU)
+library(edgeR)
+library(tidyverse)
+library(SummarizedExperiment)
+
+## for visualization
+library(ggplot2)
+```
+
+# Data import
+
+## Import transcript information
+
+```{r, message=FALSE}
+## Load the annotation resource.
+ah <- AnnotationHub()
+
+## Query for all available EnsDb databases
+all <- query(ah, "EnsDb")
+
+ahEdb <- all[["AH75036"]] #for Mus musculus
+
+txs <- transcripts(ahEdb)
+tx2gene <- as.data.frame(matrix(data = NA, nrow = length(txs), ncol = 2))
+colnames(tx2gene) <- c("TXNAME","GENEID")
+tx2gene$TXNAME <- txs$tx_id
+tx2gene$GENEID <- txs$gene_id
+```
+
+## Import counts
+
+```{r}
+quant_sf <- readRDS("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Tasic_case_data/quantsf_counts_L5IT")
+
+# Already remove genes with zero counts in all cells
+quant_sf <- quant_sf[rowSums(quant_sf) != 0,]
+dim(quant_sf)
+```
+
+## Import metadata
+
+```{r}
+access <- read.csv2("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Tasic_data/GSE115746_accession_table.csv",sep = "\t")
+access <- access[match(colnames(quant_sf),access$SRA_Run),]
+
+metaData <- openxlsx::read.xlsx("/Users/jg/Desktop/PhD/DTU_project/single_cell/Tasic/supplementary_tables/Supplementary_Table_10_Full_Metadata.xlsx")
+metaData <- metaData[match(access$sample_name,metaData$sample_name),]
+
+colnames(quant_sf) <- metaData$sample_name
+metaData <- metaData[metaData$core_intermediate_call == "Core",] # only retain cell that were unambiguously assigned to a certain cell type (cluster)
+quant_sf <- quant_sf[,metaData$sample_name]
+metaData <- metaData[,c("sample_name", "brain_region","cluster")]
+```
+
+# Data wrangling
+
+```{r}
+# Remove transcripts that are the only isoform expressed of a certain gene
+txInfo <- tx2gene
+colnames(txInfo) <- c('isoform_id','gene_id')
+rownames(txInfo) <- NULL
+
+rownames(quant_sf) <- sub("\\..*", "", rownames(quant_sf))
+txInfo <- txInfo[txInfo$isoform_id %in% rownames(quant_sf),]
+txInfo <- subset(txInfo,duplicated(gene_id) | duplicated(gene_id, fromLast=TRUE))
+
+quant_sf <- quant_sf[which(rownames(quant_sf) %in% txInfo$isoform_id),]
+dim(quant_sf)
+```
+
+# Set up the experimental design
+
+```{r}
+metaData$cluster <- gsub(" ", "_", metaData$cluster)
+metaData$group <- paste(metaData$brain_region,metaData$cluster,sep=".")
+
+# Remove groups (cell types) with less than 30 cells --> removes 4 groups
+remove <- names(table(interaction(metaData$brain_region,metaData$cluster))[table(interaction(metaData$brain_region,metaData$cluster)) < 30])
+
+metaData <- metaData[-which(metaData$group %in% remove),]
+group <- as.factor(metaData$group)
+ 
+design_full <- model.matrix(~ 0 + group) # Factorial design
+colnames(design_full) <- levels(group)
+
+quant_sf <- quant_sf[,which(colnames(quant_sf) %in% metaData$sample_name)]
+```
+
+Gene-level iltering
+
+```{r}
+filter_all_edgeR_stringent <- filterByExpr(quant_sf,
+             design = NULL,
+             group = metaData$brain_region,
+             lib.size = NULL,
+             min.count = 10,
+             min.total.count = 0,
+             large.n = 0,
+             min.prop = 0.7)
+
+table(filter_all_edgeR_stringent)
+quant_sf <- quant_sf[filter_all_edgeR_stringent,]
+
+dim(quant_sf)
+```
+
+```{r}
+# Update txInfo according to the filtering procedure
+txInfo <- txInfo[which(txInfo$isoform_id %in% rownames(quant_sf)),]
+
+# remove transcripts that are the only isoform expressed of a certain gene (after filtering)
+txInfo <- subset(txInfo,duplicated(gene_id) | duplicated(gene_id, fromLast=TRUE))
+
+quant_sf <- quant_sf[which(rownames(quant_sf) %in% txInfo$isoform_id),]
+dim(quant_sf)
+
+rm(list = setdiff(ls(), c("quant_sf", "txInfo", "design_full", "metaData", "tx2gene","group")))
+invisible(gc())
+```
+
+```{r}
+# satuRn require the transcripts in the rowData and the transcripts in the count matrix to be in the same order. If not, the resulting models (note that these are named themselves) will be matched to the wrong rowData
+txInfo <- txInfo[match(rownames(quant_sf),txInfo$isoform_id),]
+```
+
+Make a summarized experiment object
+
+```{r, message=F}
+sumExp <- SummarizedExperiment::SummarizedExperiment(assays=list(counts=quant_sf), colData = metaData, rowData = txInfo)
+metadata(sumExp)$formula <- ~ 0 + group  # specify design, internally the fit function will then use design <- model.matrix(sumExp@metadata$formula, colData(sumExp))
+```
+
+# Analysis
+
+## Fit quasi-binomial models with satuRn
+
+```{r}
+Sys.time()
+sumExp <- qbDTU::fitQB(object = sumExp,
+                       speed = FALSE,
+                       parallel = TRUE,
+                       BPPARAM = BiocParallel::bpparam(),
+                       verbose = TRUE
+                      )
+Sys.time()
+```
+
+## set up contrast matrix
+
+```{r}
+# We here manually construct the contrast of interest as defined by Tasic et al.
+design_full <- model.matrix(~0+group)
+colnames(design_full) <- levels(group)
+
+L <- matrix(0, ncol = 8, nrow = ncol(design_full))
+rownames(L) <- colnames(design_full)
+colnames(L) <- c("C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8")
+
+L[c("VISp.L5_IT_VISp_Batf3", "ALM.L5_IT_ALM_Cpa6_Gpr88"), 1] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Col27a1", "ALM.L5_IT_ALM_Cbln4_Fezf2"), 2] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Col6a1_Fezf2", "ALM.L5_IT_ALM_Cpa6_Gpr88"), 3] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Col6a1_Fezf2", "ALM.L5_IT_ALM_Gkn1_Pcdh19"), 4] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Hsd11b1_Endou", "ALM.L5_IT_ALM_Lypd1_Gpr88"), 5] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Hsd11b1_Endou", "ALM.L5_IT_ALM_Tnc"), 6] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Hsd11b1_Endou", "ALM.L5_IT_ALM_Tmem163_Dmrtb1"), 7] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Whrn_Tox2", "ALM.L5_IT_ALM_Tmem163_Arhgap25"), 8] <- c(1,-1)
+```
+
+## Test contrasts with satuRn
+
+```{r}
+sumExp <- qbDTU::topTable(object = sumExp, contrasts = L, plot=T, sort = F)
+```
+
+```{r}
+# now the rowdata have 8 additional slots, corresponding to the 8 different requested contrasts. This is a simple dataframe with results for each transcripts in the selected contrast.
+rowData(sumExp)[["fitQBResult_C6"]]
+```
+
+## Visualize DTU with satuRn
+
+To create panels A, B and C of Figure 6 of our paper.
+
+```{r}
+group1 <- rownames(colData(sumExp))[colData(sumExp)$group == "VISp.L5_IT_VISp_Hsd11b1_Endou"]
+group2 <- rownames(colData(sumExp))[colData(sumExp)$group == "ALM.L5_IT_ALM_Tnc"]
+
+plots <- qbDTU::plotDTU(object = sumExp, contrast = "C6", groups = list(group1,group2), coefficients = list(c(0,0,0,0,0,0,0,0,0,0,0,0,1,0),c(0,0,0,0,0,0,0,0,1,0,0,0,0,0)), summaryStat = "model", transcripts = c("ENSMUST00000081554","ENSMUST00000195963","ENSMUST00000132062"),genes = NULL,top.n = 6)
+
+# to have same layout as in our paper
+for (i in seq_along(plots)) {
+  current_plot <- plots[[i]]  + 
+  scale_fill_manual(labels = c("VISp","ALM"), values=c("royalblue4", "firebrick")) +
+  scale_x_discrete(labels= c("Hsd11b1_Endou","Tnc"))
+  
+  # png(paste0(current_plot$data$variable[1],"_DTU.png"),
+  #   width     = 5,
+  #   height    = 5,
+  #   units     = "in",
+  #   res       = 200,
+  #   pointsize = 4)
+  print(current_plot)
+  # dev.off()
+}
+```
+
+To create all panels of Figure 7 of our paper.
+
+```{r}
+plots <- qbDTU::plotDTU(object = sumExp, contrast = "C6", groups = list(group1,group2), coefficients = list(c(0,0,0,0,0,0,0,0,0,0,0,0,1,0),c(0,0,0,0,0,0,0,0,1,0,0,0,0,0)), summaryStat = c("model","mean"), transcripts = c("ENSMUST00000080335","ENSMUST00000125287","ENSMUST00000106956"),genes = NULL,top.n = 6)
+
+# to have same layout as in our paper
+for (i in seq_along(plots)) {
+  current_plot <- plots[[i]]  + 
+  scale_fill_manual(labels = c("VISp","ALM"), values=c("royalblue4", "firebrick")) +
+  scale_x_discrete(labels= c("Hsd11b1_Endou","Tnc"))
+  
+  if(i==2){
+    current_plot$layers[[4]] <- NULL
+  }
+  
+  # png(paste0(current_plot$data$variable[1],"_DTU.png"),
+  #   width     = 5,
+  #   height    = 5,
+  #   units     = "in",
+  #   res       = 200,
+  #   pointsize = 4)
+  print(current_plot)
+  # dev.off()
+}
+```
+
+# Save final object
+
+Save resulting object for later comparison of results with limma
+
+```{r}
+saveRDS(sumExp, "sumExp.Rds")
+```

@@ -1,0 +1,626 @@
+---
+title: "Tasic_analysis_L5IT_limma"
+output: html_document
+---
+
+# Load libraries
+
+```{r,message=FALSE}
+# for data import
+library(AnnotationHub)
+library(ensembldb)
+
+# for analysis
+library(edgeR)
+library(tidyverse)
+
+# for visualization
+library(ggplot2)
+```
+
+# Data import
+
+## Import transcript information
+
+```{r, message=FALSE}
+## Load the annotation resource.
+ah <- AnnotationHub()
+
+## Query for all available EnsDb databases
+all <- query(ah, "EnsDb")
+
+ahEdb <- all[["AH75036"]] #for Mus musculus
+
+txs <- transcripts(ahEdb)
+tx2gene <- as.data.frame(matrix(data = NA, nrow = length(txs), ncol = 2))
+colnames(tx2gene) <- c("TXNAME","GENEID")
+tx2gene$TXNAME <- txs$tx_id
+tx2gene$GENEID <- txs$gene_id
+```
+
+## Import counts
+
+```{r}
+quant_sf <- readRDS("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Tasic_case_data/quantsf_counts_L5IT")
+
+# Already remove genes with zero counts in all cells
+quant_sf <- quant_sf[rowSums(quant_sf) != 0,]
+dim(quant_sf)
+```
+
+## Import metadata
+
+```{r}
+access <- read.csv2("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Tasic_data/GSE115746_accession_table.csv",sep = "\t")
+access <- access[match(colnames(quant_sf),access$SRA_Run),]
+
+metaData <- openxlsx::read.xlsx("/Users/jg/Desktop/PhD/DTU_project/single_cell/Tasic/supplementary_tables/Supplementary_Table_10_Full_Metadata.xlsx")
+metaData <- metaData[match(access$sample_name,metaData$sample_name),]
+
+colnames(quant_sf) <- metaData$sample_name
+metaData <- metaData[metaData$core_intermediate_call == "Core",] # only retain cell that were unambiguously assigned to a certain cell type (cluster)
+quant_sf <- quant_sf[,metaData$sample_name]
+metaData <- metaData[,c("sample_name", "brain_region","cluster")]
+```
+
+# Data wrangling
+
+```{r}
+# Remove transcripts that are the only isoform expressed of a certain gene
+txInfo <- tx2gene
+colnames(txInfo) <- c('isoform_id','gene_id')
+rownames(txInfo) <- NULL
+
+rownames(quant_sf) <- sub("\\..*", "", rownames(quant_sf))
+txInfo <- txInfo[txInfo$isoform_id %in% rownames(quant_sf),]
+txInfo <- subset(txInfo,duplicated(gene_id) | duplicated(gene_id, fromLast=TRUE))
+
+quant_sf <- quant_sf[which(rownames(quant_sf) %in% txInfo$isoform_id),]
+dim(quant_sf)
+```
+
+# Set up the experimental design
+
+```{r}
+metaData$cluster <- gsub(" ", "_", metaData$cluster)
+metaData$group <- paste(metaData$brain_region,metaData$cluster,sep=".")
+
+# Remove groups (cell types) with less than 30 cells --> removes 4 groups
+remove <- names(table(interaction(metaData$brain_region,metaData$cluster))[table(interaction(metaData$brain_region,metaData$cluster)) < 30])
+
+metaData <- metaData[-which(metaData$group %in% remove),]
+group <- as.factor(metaData$group)
+ 
+design_full <- model.matrix(~ 0 + group) # Factorial design
+colnames(design_full) <- levels(group)
+
+quant_sf <- quant_sf[,which(colnames(quant_sf) %in% metaData$sample_name)]
+```
+
+Gene-level iltering
+
+```{r}
+filter_all_edgeR_stringent <- filterByExpr(quant_sf,
+             design = NULL,
+             group = metaData$brain_region,
+             lib.size = NULL,
+             min.count = 10,
+             min.total.count = 0,
+             large.n = 0,
+             min.prop = 0.7)
+
+table(filter_all_edgeR_stringent)
+quant_sf <- quant_sf[filter_all_edgeR_stringent,]
+
+dim(quant_sf)
+```
+
+```{r}
+# Update txInfo according to the filtering procedure
+txInfo <- txInfo[which(txInfo$isoform_id %in% rownames(quant_sf)),]
+
+# remove transcripts that are the only isoform expressed of a certain gene (after filtering)
+txInfo <- subset(txInfo,duplicated(gene_id) | duplicated(gene_id, fromLast=TRUE))
+
+quant_sf <- quant_sf[which(rownames(quant_sf) %in% txInfo$isoform_id),]
+dim(quant_sf)
+
+rm(list = setdiff(ls(), c("quant_sf", "txInfo", "design_full", "metaData", "tx2gene","group")))
+invisible(gc())
+```
+
+```{r}
+# satuRn require the transcripts in the rowData and the transcripts in the count matrix to be in the same order. If not, the resulting models (note that these are named themselves) will be matched to the wrong rowData
+txInfo <- txInfo[match(rownames(quant_sf),txInfo$isoform_id),]
+```
+
+# Analysis
+
+## Fit, set contrasts, test
+
+```{r}
+geneForEachTx <- txInfo$gene_id[match(rownames(quant_sf),txInfo$isoform_id)]
+y <- DGEList(counts = quant_sf, group=as.factor(metaData$group), genes = geneForEachTx)
+
+y <- calcNormFactors(y)
+
+v <- voom(y, design_full, plot=F)
+fit <- lmFit(v, design_full)
+
+contrast.matrix <- makeContrasts(VISp.L5_IT_VISp_Batf3-ALM.L5_IT_ALM_Cpa6_Gpr88, VISp.L5_IT_VISp_Col27a1-ALM.L5_IT_ALM_Cbln4_Fezf2, VISp.L5_IT_VISp_Col6a1_Fezf2-ALM.L5_IT_ALM_Cpa6_Gpr88, VISp.L5_IT_VISp_Col6a1_Fezf2-ALM.L5_IT_ALM_Gkn1_Pcdh19, VISp.L5_IT_VISp_Hsd11b1_Endou-ALM.L5_IT_ALM_Lypd1_Gpr88, VISp.L5_IT_VISp_Hsd11b1_Endou-ALM.L5_IT_ALM_Tnc, VISp.L5_IT_VISp_Hsd11b1_Endou-ALM.L5_IT_ALM_Tmem163_Dmrtb1, VISp.L5_IT_VISp_Whrn_Tox2-ALM.L5_IT_ALM_Tmem163_Arhgap25, levels=design_full)
+
+fit2 <- contrasts.fit(fit, contrast.matrix)
+fit2 <- eBayes(fit2)
+
+ex <- limma::diffSplice(fit2, geneid = "genes", verbose = F)
+
+for (i in seq_len(ncol(ex$coefficients))) {
+  limmaRes <- topSplice(ex, coef=i, test="t", number = Inf)
+  print(sum(limmaRes$FDR <= 0.05))
+}
+```
+
+## post-processing
+
+Without correction, we obtain a huge number of DTU transcripts with the limma analysis. Therefore, we additionally post-process the results according to the empirical FDR strategy implemented in satuRn (which is adapted from the locfdr function from the locfdr package by Efron et al.).
+
+At the same time, all panels of Figures S8 and S9 of our paper are generated.
+
+```{r}
+limmaRes_all<- list()
+for (i in seq_len(ncol(ex$coefficients))) {
+  limmaRes <- topSplice(ex, coef=i, test="t", number = Inf)
+  print(sum(limmaRes$FDR <= 0.05))
+  
+  t <- limmaRes$t
+  pval <- limmaRes$P.Value
+  FDR <- limmaRes$FDR
+  
+  # Generate Figure S8
+  # png(paste("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/new_analysis/Results/Case_study_L5It/Figure_S8/pvalHist", i, ".png", sep = ""),
+  #         width     = 3.5,
+  #         height    = 2.5,
+  #         units     = "in",
+  #         res       = 300,
+  #         pointsize = 6) # start export
+  hist(pval, breaks=40, main = paste("contrast",i))
+  # dev.off()
+  
+  # Generate Figure S9
+  zval <- qnorm(pval/2)*sign(t)
+  zval_mid <- zval[abs(zval) < 10]
+  zval_mid <- zval_mid[!is.na(zval_mid)]
+  
+  # png(paste("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/new_analysis/Results/Case_study_L5It/Figure_S9/emp", i, ".png", sep = ""),
+  #         width     = 3.5,
+  #         height    = 2.5,
+  #         units     = "in",
+  #         res       = 300,
+  #         pointsize = 6) # start export
+  plot_lfdr <- locfdr::locfdr(zval_mid,plot=T,main=paste("contrast",i))
+  # dev.off()
+  
+  empirical <- qbDTU:::p.adjust_empirical(pval,t,plot=F) # empirical FDR correction as implemented in satuRn
+
+  empirical_pval <- empirical$pval
+  empirical_FDR <-  empirical$FDR
+
+  result_limma <- data.frame(t,pval,FDR,empirical_pval,empirical_FDR)
+  rownames(result_limma) <- rownames(limmaRes)
+  
+  print(sum(result_limma$empirical_FDR <= 0.05))
+  
+  limmaRes_all[[i]] <- result_limma
+}
+```
+
+# Save final object
+
+Save resulting object for later comparison of results with satuRn
+
+```{r}
+saveRDS(limmaRes_all,"limmaRes_all.Rds")
+```
+
+# GSEA
+
+Top 200 DTU genes (limma) for GSEA
+
+```{r}
+current_data <- topSplice(ex, coef=5, test="t", number = Inf)
+current_data <- current_data[order(current_data$P.Value),]
+DTU_gene <- unique(tx2gene[match(rownames(current_data),tx2gene$TXNAME),"GENEID"])
+sink(file = "Tasic_L5IT_contrast5_DTU_top200_limma.txt")
+cat(DTU_gene, "\n")
+sink()
+
+current_data <- topSplice(ex, coef=6, test="t", number = Inf)
+current_data <- current_data[order(current_data$P.Value),]
+DTU_gene <- unique(tx2gene[match(rownames(current_data),tx2gene$TXNAME),"GENEID"])[1:200]
+sink(file = "Tasic_L5IT_contrast6_DTU_top200_limma.txt")
+cat(DTU_gene, "\n")
+sink()
+
+current_data <- topSplice(ex, coef=7, test="t", number = Inf)
+current_data <- current_data[order(current_data$P.Value),]
+DTU_gene <- unique(tx2gene[match(rownames(current_data),tx2gene$TXNAME),"GENEID"])[1:200]
+sink(file = "Tasic_L5IT_contrast7_DTU_top200_limma.txt")
+cat(DTU_gene, "\n")
+sink()
+```
+
+
+Significant limma GSEA
+
+```{r}
+current_data <- limmaRes_all[[5]]
+current_data <- current_data[which(current_data$empirical_FDR <= 0.05),]
+DTU_gene <- unique(tx2gene[match(rownames(current_data),tx2gene$TXNAME),"GENEID"])
+sink(file = "Tasic_L5IT_contrast5_DTU_limma.txt")
+cat(DTU_gene, "\n")
+sink()
+
+current_data <- limmaRes_all[[6]]
+current_data <- current_data[which(current_data$empirical_FDR <= 0.05),]
+DTU_gene <- unique(tx2gene[match(rownames(current_data),tx2gene$TXNAME),"GENEID"])
+sink(file = "Tasic_L5IT_contrast6_DTU_limma.txt")
+cat(DTU_gene, "\n")
+sink()
+
+current_data <- limmaRes_all[[7]]
+current_data <- current_data[which(current_data$empirical_FDR <= 0.05),]
+DTU_gene <- unique(tx2gene[match(rownames(current_data),tx2gene$TXNAME),"GENEID"])
+sink(file = "Tasic_L5IT_contrast7_DTU_limma.txt")
+cat(DTU_gene, "\n")
+sink()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Second way
+
+```{r}
+# I here manually construct the contrast of interest as defined by Tasic et al.
+L <- matrix(0, ncol = 8, nrow = ncol(design_full))
+rownames(L) <- colnames(design_full)
+colnames(L) <- c("C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8")
+
+L[c("VISp.L5_IT_VISp_Batf3", "ALM.L5_IT_ALM_Cpa6_Gpr88"), 1] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Col27a1", "ALM.L5_IT_ALM_Cbln4_Fezf2"), 2] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Col6a1_Fezf2", "ALM.L5_IT_ALM_Cpa6_Gpr88"), 3] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Col6a1_Fezf2", "ALM.L5_IT_ALM_Gkn1_Pcdh19"), 4] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Hsd11b1_Endou", "ALM.L5_IT_ALM_Lypd1_Gpr88"), 5] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Hsd11b1_Endou", "ALM.L5_IT_ALM_Tnc"), 6] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Hsd11b1_Endou", "ALM.L5_IT_ALM_Tmem163_Dmrtb1"), 7] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Whrn_Tox2", "ALM.L5_IT_ALM_Tmem163_Arhgap25"), 8] <- c(1,-1)
+
+design_coef <- contrastAsCoef(design_full, contrast=L)
+
+v <- voom(y, design_coef$design, plot=T)
+fit <- lmFit(v, design_coef$design)
+
+ex_2 <- limma::diffSplice(fit, geneid = "genes")
+limmaRes_2 <- topSplice(ex_2, coef=8, test="t", number = Inf)
+
+for (i in 1:8) {
+  limmaRes_2 <- topSplice(ex_2, coef=i, test="t", number = Inf)
+  print(sum(limmaRes_2$FDR <= 0.05))
+}
+```
+
+```{r}
+for (i in 1:8) {
+  png(paste0("plot", i,".png"))
+  limmaRes_2 <- topSplice(ex_2, coef=i, test="t", number = Inf)
+  hist(limmaRes_2$P.Value, breaks=40)
+  dev.off()
+}
+```
+
+
+Now, to be completely sure, subset the data to one contrast (2 groups) and assess this
+(will not give the exact same result)
+
+Contrast separately
+
+```{r}
+contrasts <- list(c("VISp.L5_IT_VISp_Batf3", "ALM.L5_IT_ALM_Cpa6_Gpr88") ,c("VISp.L5_IT_VISp_Col27a1", "ALM.L5_IT_ALM_Cbln4_Fezf2"), c("VISp.L5_IT_VISp_Col6a1_Fezf2", "ALM.L5_IT_ALM_Cpa6_Gpr88"), c("VISp.L5_IT_VISp_Col6a1_Fezf2", "ALM.L5_IT_ALM_Gkn1_Pcdh19"), c("VISp.L5_IT_VISp_Hsd11b1_Endou", "ALM.L5_IT_ALM_Lypd1_Gpr88"), c("VISp.L5_IT_VISp_Hsd11b1_Endou", "ALM.L5_IT_ALM_Tnc"), c("VISp.L5_IT_VISp_Hsd11b1_Endou", "ALM.L5_IT_ALM_Tmem163_Dmrtb1"), c("VISp.L5_IT_VISp_Whrn_Tox2", "ALM.L5_IT_ALM_Tmem163_Arhgap25"))
+
+for (i in 1:8) {
+
+    metaData_sub <- metaData[which(metaData$group %in% contrasts[[i]]),]
+    quant_sf_sub <- quant_sf[,which(colnames(quant_sf) %in% metaData_sub$sample_name)]
+
+    design_sub <- model.matrix(~ metaData_sub$group)
+
+    geneForEachTx <- txInfo$gene_id[match(rownames(quant_sf_sub),txInfo$isoform_id)]
+    y <- DGEList(counts = quant_sf_sub, group=as.factor(metaData_sub$group), genes = geneForEachTx)
+
+    y <- calcNormFactors(y)
+
+    v <- voom(y, design_sub, plot=F)
+    fit <- lmFit(v, design_sub)
+
+    ex_3 <- limma::diffSplice(fit, geneid = "genes",verbose = F)
+    limmaRes_3 <- topSplice(ex_3, coef=2, test="t", number = Inf)
+
+    print(sum(limmaRes_3$FDR <= 0.05))
+}
+```
+
+contrast per contrast
+[1] 3536
+[1] 352
+[1] 1170
+[1] 3583
+[1] 1234
+[1] 4903
+[1] 5792
+[1] 1817
+
+all together
+[1] 3602
+[1] 468
+[1] 1029
+[1] 2861
+[1] 1411
+[1] 4819
+[1] 5603
+[1] 1387
+
+qbDTU without empirical
+[1] 2130
+[1] 456
+[1] 624
+[1] 2265
+[1] 1192
+[1] 4314
+[1] 4461
+[1] 674
+
+qbDTU with empirical
+[1] 24
+[1] 92
+[1] 7
+[1] 33
+[1] 118
+[1] 193
+[1] 90
+[1] 63
+
+qbDTU width empirical null
+
+
+
+
+```{r}
+## for the final contrast, VISp.L5_IT_VISp_Whrn_Tox2 vs. ALM.L5_IT_ALM_Tmem163_Arhgap25
+## initial
+fit$coefficients["ENSMUST00000000080",c(7,14)]
+fit$coefficients["ENSMUST00000000080",14] - fit$coefficients["ENSMUST00000000080",7]
+fit$coefficients["ENSMUST00000222857",14] - fit$coefficients["ENSMUST00000222857",7]
+## now
+fit_2$coefficients["ENSMUST00000000080",8]
+fit_2$coefficients["ENSMUST00000222857",8]
+## seems good
+```
+
+Check for others
+
+```{r}
+## for the 6th contrast
+## initial
+fit$coefficients[c(1:6),13] - fit$coefficients[c(1:6),9]
+## now
+fit_2$coefficients[c(1:6),6]
+## seems good
+```
+
+
+```{r}
+head(ex$coefficients["ENSMUST00000000080",14])-head(ex$coefficients["ENSMUST00000000080",7])
+head(ex$coefficients["ENSMUST00000222857",14])-head(ex$coefficients["ENSMUST00000222857",7])
+
+ex_2$coefficients["ENSMUST00000000080",8]
+ex_2$coefficients["ENSMUST00000222857",8]
+# should these also be equal?
+```
+
+
+```{r}
+for (i in 1:8) {
+  limmaRes_2 <- topSplice(ex_2, coef=i, test="t", number = Inf)
+  print(sum(limmaRes_2$FDR <= 0.05))
+}
+```
+
+```{r}
+nrDTU_qbDTU <- c(24,   92,  7,     33,   118,  193,  90,   63)
+nrDTU_limma <- c(3602, 468, 1029,  2861, 1411, 4819, 5603, 1387)
+
+nrDTU_qbDTU/nrDTU_limma
+```
+
+Huge number of DTUs as compared to qbDTU!!
+Numbers more in line with the original DGE analysis
+
+```{r}
+table(metaData$group)[names(table(metaData$group))%in%c("VISp.L5_IT_VISp_Batf3", "ALM.L5_IT_ALM_Cpa6_Gpr88")]
+table(metaData$group)[names(table(metaData$group))%in%c("VISp.L5_IT_VISp_Col27a1", "ALM.L5_IT_ALM_Cbln4_Fezf2")]
+table(metaData$group)[names(table(metaData$group))%in%c("VISp.L5_IT_VISp_Col6a1_Fezf2", "ALM.L5_IT_ALM_Cpa6_Gpr88")]
+table(metaData$group)[names(table(metaData$group))%in%c("VISp.L5_IT_VISp_Col6a1_Fezf2", "ALM.L5_IT_ALM_Gkn1_Pcdh19")]
+table(metaData$group)[names(table(metaData$group))%in%c("VISp.L5_IT_VISp_Hsd11b1_Endou", "ALM.L5_IT_ALM_Lypd1_Gpr88")]
+table(metaData$group)[names(table(metaData$group))%in%c("VISp.L5_IT_VISp_Hsd11b1_Endou", "ALM.L5_IT_ALM_Tnc")]
+table(metaData$group)[names(table(metaData$group))%in%c("VISp.L5_IT_VISp_Hsd11b1_Endou", "ALM.L5_IT_ALM_Tmem163_Dmrtb1")]
+table(metaData$group)[names(table(metaData$group))%in%c("VISp.L5_IT_VISp_Whrn_Tox2", "ALM.L5_IT_ALM_Tmem163_Arhgap25")]
+```
+
+Limma diffsplice seemed more liberal in our benchmarks (which may explain why we observe so many more DTU calls). However, this "problem" seemed to decrease in larger sample sizes, and was not pronounced in the Tasic benchmark. Also, here the sample size are already large. Do note that, in contrast to the benchmark, the comparisons here are unbalanced in sample size.
+
+Check agreement
+
+```{r}
+for (i in 1:8) {
+  limmaRes <- topSplice(ex_2, coef=i, test="t", number = Inf)
+  limmaRes_sig <- rownames(limmaRes)[which(limmaRes$FDR <= 0.05)]
+  
+  qbDTU_sig <- rownames(res_glm[[i]][res_glm[[i]]$regular_FDR <= 0.05,])
+  #qbDTU_sig <- rownames(res_glm[[i]][res_glm[[i]]$empirical_FDR <= 0.05,])
+  
+  print(length(which(limmaRes_sig %in% qbDTU_sig)))
+}
+```
+
+
+
+
+
+Look at ranking
+
+contrast 6
+
+```{r}
+limmaRes_2_6 <- topSplice(ex_2, coef=6, test="t", number = Inf)
+sum(limmaRes_2_6$FDR <= 0.05)
+
+sum(res_glm[[6]]$empirical_FDR <= 0.05, na.rm = T)
+sum(res_glm[[6]]$regular_FDR <= 0.05, na.rm = T)
+```
+
+```{r}
+limmaRes_2_6 <- topSplice(ex_2, coef=6, test="t", number = Inf)
+#limmaRes_2_6
+limmaRes_2_6_sig <- rownames(limmaRes_2_6)[which(limmaRes_2_6$FDR <= 0.05)]
+
+sum(res_glm[[6]]$empirical_FDR <= 0.05, na.rm = T)
+sum(res_glm[[6]]$se>100, na.rm = T) # do have some incredibly large estimates?
+
+res_glm[[6]][order(res_glm[[6]]$empirical_pval),]
+
+#qbDTU_sig_6 <- rownames(res_glm[[6]][res_glm[[6]]$empirical_FDR <= 0.05,])
+qbDTU_sig_6 <- rownames(res_glm[[6]][res_glm[[6]]$regular_FDR <= 0.05,])
+#qbDTU_sig_6
+
+#which(rownames(limmaRes_2_6) %in% qbDTU_sig_6)
+length(which(rownames(limmaRes_2_6) %in% qbDTU_sig_6))
+length(which(qbDTU_sig_6 %in% rownames(limmaRes_2_6) ))
+
+#which(rownames(limmaRes_2_6[limmaRes_2_6$FDR <= 0.05,]) %in% qbDTU_sig_6)
+length(which(limmaRes_2_6_sig %in% qbDTU_sig_6))
+length(which(qbDTU_sig_6 %in% rownames(limmaRes_2_6[limmaRes_2_6$FDR <= 0.05,])))
+
+## From the 193 txs found in our analysis, 183 are present in the toplist from limma
+## This is not surprising, as limma claims 4819 DTU transcripts in this contrast...
+```
+
+contrast 8
+
+```{r}
+limmaRes_2_8 <- topSplice(ex_2, coef=8, test="t", number = Inf)
+limmaRes_2_8
+
+sum(res_glm[[8]]$empirical_FDR <= 0.05, na.rm = T)
+sum(res_glm[[8]]$se>100, na.rm = T) # do have some incredibly large estimates?
+
+res_glm[[8]][order(res_glm[[8]]$empirical_pval),]
+
+qbDTU_sig_8 <- rownames(res_glm[[8]][res_glm[[8]]$empirical_FDR <= 0.05,])
+qbDTU_sig_8
+
+which(rownames(limmaRes_2_8) %in% qbDTU_sig_8)
+length(which(rownames(limmaRes_2_8) %in% qbDTU_sig_8))
+
+which(rownames(limmaRes_2_8[limmaRes_2_8$FDR <= 0.05,]) %in% qbDTU_sig_8)
+length(which(rownames(limmaRes_2_8[limmaRes_2_8$FDR <= 0.05,]) %in% qbDTU_sig_8))
+
+## From the 63 txs found in our analysis, 42 are present in the toplist from limma
+## This is quite low to me, as limma claims 1387 DTU transcripts in this contrast...
+```
+
+Inspect some txs that limma finds and we dont
+
+```{r}
+limma_not_qbDTU <- rownames(limmaRes_2_8)[which(!rownames(limmaRes_2_8[limmaRes_2_8$FDR <= 0.05,]) %in% qbDTU_sig_8)][1:30]
+
+qbDTU::plotDTU(topTable = res_glm[[8]], contrast = L[,8], metaData=metaData, countData = quant_sf, tx2gene = txInfo, transcripts=limma_not_qbDTU)
+
+## they actually look quite good...
+```
+
+Inspect some txs that we find and limma doesnt
+
+```{r}
+which(rownames(limmaRes_2_8) %in% qbDTU_sig_8)
+which(rownames(limmaRes_2_8[limmaRes_2_8$FDR <= 0.05,]) %in% qbDTU_sig_8)
+
+hlp <- limmaRes_2_8[which(rownames(limmaRes_2_8) %in% qbDTU_sig_8),]
+
+qbDTU_not_limma <- rownames(hlp[which(hlp$FDR  > 0.05),])
+
+
+qbDTU::plotDTU(topTable = res_glm[[8]], contrast = L[,8], metaData=metaData, countData = quant_sf, tx2gene = txInfo, transcripts=qbDTU_not_limma)
+
+## to me, it seems that our calls are more based on observations with high weight
+```
+
+Export two files
+1) DTU as found by limma
+2) DTU as found by limma and not by qbDTU
+
+```{r}
+# GSEA analysis on the significant TXs (converted to gene IDs) of the contrast with the most significant DTU TXs
+limma_not_qbDTU_full <- rownames(limmaRes_2_8)[which(!rownames(limmaRes_2_8[limmaRes_2_8$FDR <= 0.05,]) %in% qbDTU_sig_8)]
+
+genes <- txInfo[which(txInfo$isoform_id  %in% limma_not_qbDTU_full), 'gene_id']
+genes <- unique(genes)
+
+sink(file = "Tasic_L5IT_contrast8_DTU_limma_not_qbDTU.txt")
+cat(genes, "\n")
+sink()
+
+limma <- rownames(limmaRes_2_8)[which(limmaRes_2_8$FDR <= 0.05)]
+
+genes <- txInfo[which(txInfo$isoform_id  %in% limma), 'gene_id']
+genes <- unique(genes)
+
+sink(file = "Tasic_L5IT_contrast8_DTU_limma.txt")
+cat(genes, "\n")
+sink()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
