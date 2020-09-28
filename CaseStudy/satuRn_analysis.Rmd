@@ -207,7 +207,7 @@ for (i in seq_along(plots)) {
   scale_fill_manual(labels = c("VISp","ALM"), values=c("royalblue4", "firebrick")) +
   scale_x_discrete(labels= c("Hsd11b1_Endou","Tnc"))
   
-  # png(paste0(current_plot$data$variable[1],"_DTU.png"),
+  # png(paste0("CaseStudy_results/",current_plot$data$variable[1],"_DTU.png"),
   #   width     = 5,
   #   height    = 5,
   #   units     = "in",
@@ -233,7 +233,7 @@ for (i in seq_along(plots)) {
     current_plot$layers[[4]] <- NULL
   }
   
-  # png(paste0(current_plot$data$variable[1],"_DTU.png"),
+  # png(paste0("CaseStudy_results/",current_plot$data$variable[1],"_DTU.png"),
   #   width     = 5,
   #   height    = 5,
   #   units     = "in",

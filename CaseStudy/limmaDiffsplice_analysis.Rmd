@@ -222,31 +222,3 @@ Save resulting object for later comparison of results with satuRn
 saveRDS(limmaRes_all,"limmaRes_all.Rds")
 ```
 
-# GSEA
-
-Significant limma for GSEA
-
-```{r}
-current_data <- limmaRes_all[[5]]
-current_data <- current_data[which(current_data$empirical_FDR <= 0.05),]
-DTU_gene <- unique(tx2gene[match(rownames(current_data),tx2gene$TXNAME),"GENEID"])
-sink(file = "GSEA/Tasic_L5IT_contrast5_DTU_limma.txt")
-cat(DTU_gene, "\n")
-sink()
-
-current_data <- limmaRes_all[[6]]
-current_data <- current_data[which(current_data$empirical_FDR <= 0.05),]
-DTU_gene <- unique(tx2gene[match(rownames(current_data),tx2gene$TXNAME),"GENEID"])
-sink(file = "GSEA/Tasic_L5IT_contrast6_DTU_limma.txt")
-cat(DTU_gene, "\n")
-sink()
-
-current_data <- limmaRes_all[[7]]
-current_data <- current_data[which(current_data$empirical_FDR <= 0.05),]
-DTU_gene <- unique(tx2gene[match(rownames(current_data),tx2gene$TXNAME),"GENEID"])
-sink(file = "GSEA/Tasic_L5IT_contrast7_DTU_limma.txt")
-cat(DTU_gene, "\n")
-sink()
-```
-
-

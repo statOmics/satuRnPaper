@@ -14,33 +14,33 @@ Read all results
 
 ```{r}
 # read quasiBinomial results
-load("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Scalability/results/finalOutput_quasiBinomial_1.RData")
-load("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Scalability/results/finalOutput_quasiBinomial_2.RData")
+load("Data/Scalability/Scalability/finalOutput_quasiBinomial_1.RData")
+load("Data/Scalability/finalOutput_quasiBinomial_2.RData")
 
 # read limmaDiffsplice results
-load("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Scalability/results/finalOutput_limmaDiffsplice_1.RData")
-load("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Scalability/results/finalOutput_limmaDiffsplice_2.RData")
+load("Data/Scalability/finalOutput_limmaDiffsplice_1.RData")
+load("Data/Scalability/finalOutput_limmaDiffsplice_2.RData")
 
 # read edgeRDiffsplice results
-load("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Scalability/results/finalOutput_edgeRDiffsplice_1.RData")
-load("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Scalability/results/finalOutput_edgeRDiffsplice_2.RData")
+load("Data/Scalability/finalOutput_edgeRDiffsplice_1.RData")
+load("Data/Scalability/finalOutput_edgeRDiffsplice_2.RData")
 
 # read DRIMSeq results
-load("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Scalability/results/finalOutput_DRIMSeq_1.RData")
-load("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Scalability/results/finalOutput_DRIMSeq_2.RData")
+load("Data/Scalability/finalOutput_DRIMSeq_1.RData")
+load("Data/Scalability/finalOutput_DRIMSeq_2.RData")
 
 # read DoubleExpSeq results
-load("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Scalability/results/finalOutput_DoubleExpSeq_1.RData")
-load("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Scalability/results/finalOutput_DoubleExpSeq_2.RData")
+load("Data/Scalability/finalOutput_DoubleExpSeq_1.RData")
+load("Data/Scalability/finalOutput_DoubleExpSeq_2.RData")
 
 # read DEXSeq results
-load("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Scalability/results/finalOutput_DEXSeq_2.RData")
-load("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Scalability/results/finalOutput_DEXSeq_3.RData")
-load("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Scalability/results/finalOutput_DEXSeq_4.RData")
+load("Data/Scalability/finalOutput_DEXSeq_2.RData")
+load("Data/Scalability/finalOutput_DEXSeq_3.RData")
+load("Data/Scalability/finalOutput_DEXSeq_4.RData")
 
 # read BANDITS results
-load("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Scalability/results/finalOutput_BANDITS_5.RData")
-load("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Scalability/results/finalOutput_BANDITS_6.RData")
+load("Data/Scalability/finalOutput_BANDITS_5.RData")
+load("Data/Scalability/finalOutput_BANDITS_6.RData")
 ```
 
 Concatenate all results
@@ -74,14 +74,68 @@ for (i in seq_len(nrow(full_dataframe))) {
 
 ---
 
-# Scalability w.r.t. number of cells
+# Scalability w.r.t. number of cells (1)
+
+Without our method, used to generate Figure 1, panel B from our paper.
 
 ```{r}
 data_30K <- full_dataframe[which(full_dataframe$TXs_round == 30000),]
+
+png("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Results/Scalability/scale_cells_intro.png",
+  width     = 5,
+  height    = 5,
+  units     = "in",
+  res       = 200,
+  pointsize = 4)
+
+ggplot(data = data_30K[-which(data_30K$method == "satuRn"),], aes(x=groupSize,y=elapsed/60,color=method)) +
+  geom_line() +
+  geom_point() +
+  scale_color_manual(values=c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2")) +
+  theme_bw() +
+  ylab("elapsed  time (min)") + 
+  xlab("number of cells per group")
+
+dev.off()
 ```
 
+# Scalability w.r.t. number of transcripts (1)
+
+Without our method, used to generate Figure 1, panel C from our paper.
+
 ```{r}
-# scalability w.r.t. number of cells
+data_16cells <- full_dataframe[which(full_dataframe$groupSize == 16),]
+
+png("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Results/Scalability/scale_transcripts_intro.png",
+  width     = 5,
+  height    = 5,
+  units     = "in",
+  res       = 200,
+  pointsize = 4)
+
+ggplot(data = data_16cells[-which(data_16cells$method == "satuRn"),], aes(x=TXs,y=elapsed/60,color=method)) +
+  geom_line() +
+  geom_point() +
+  scale_color_manual(values=c("#CC79A7", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2")) +
+  theme_bw() +
+  ylab("elapsed  time (min)") + 
+  xlab("number of transcripts")
+
+dev.off()
+```
+
+# Scalability w.r.t. number of cells (2)
+
+Including our method, used to generate Figure 5, panels A from our paper.
+
+```{r}
+png("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Results/Scalability/scale_cells_all.png",
+  width     = 5,
+  height    = 5,
+  units     = "in",
+  res       = 200,
+  pointsize = 4)
+
 ggplot(data = data_30K, aes(x=groupSize,y=elapsed/60,color=method)) +
   geom_line() +
   geom_point() +
@@ -89,10 +143,19 @@ ggplot(data = data_30K, aes(x=groupSize,y=elapsed/60,color=method)) +
   theme_bw() +
   ylab("elapsed  time (min)") + 
   xlab("number of cells per group")
+
+dev.off()
 ```
 
 ```{r}
-# scalability w.r.t. number of cells - zoom
+# zoom
+png("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Results/Scalability/scale_cells_all_zoom.png",
+  width     = 5,
+  height    = 5,
+  units     = "in",
+  res       = 200,
+  pointsize = 4)
+
 ggplot(data = data_30K[-which(data_30K$method %in% c("DEXSeq","DRIMSeq")),], aes(x=groupSize,y=elapsed/60,color=method)) +
   geom_line() +
   geom_point() +
@@ -100,17 +163,22 @@ ggplot(data = data_30K[-which(data_30K$method %in% c("DEXSeq","DRIMSeq")),], aes
   theme_bw() +
   ylab("elapsed  time (min)") + 
   xlab("number of cells per group")
+
+dev.off()
 ```
 
---- 
+# Scalability w.r.t. number of transcripts (2)
 
-# Scalability w.r.t. number of transcripts
-
-```{r}
-data_16cells <- full_dataframe[which(full_dataframe$groupSize == 16),]
-```
+Including our method, used to generate Figure 5, panels B from our paper.
 
 ```{r}
+png("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Results/Scalability/scale_transcripts_all.png",
+  width     = 5,
+  height    = 5,
+  units     = "in",
+  res       = 200,
+  pointsize = 4)
+
 ggplot(data = data_16cells, aes(x=TXs,y=elapsed/60,color=method)) +
   geom_line() +
   geom_point() +
@@ -118,10 +186,19 @@ ggplot(data = data_16cells, aes(x=TXs,y=elapsed/60,color=method)) +
   theme_bw() +
   ylab("elapsed  time (min)") + 
   xlab("number of transcripts")
+
+dev.off()
 ```
 
 ```{r}
-# scalability w.r.t. number of transcripts
+# zoom
+png("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Results/Scalability/scale_transcripts_all_zoom.png",
+  width     = 5,
+  height    = 5,
+  units     = "in",
+  res       = 200,
+  pointsize = 4)
+
 ggplot(data = data_16cells[-which(data_16cells$method %in% c("BANDITS", "DEXSeq","DRIMSeq")),], aes(x=TXs,y=elapsed/60,color=method)) +
   geom_line() +
   geom_point() +
@@ -129,4 +206,6 @@ ggplot(data = data_16cells[-which(data_16cells$method %in% c("BANDITS", "DEXSeq"
   theme_bw() +
   ylab("elapsed  time (min)") + 
   xlab("number of transcripts")
+
+dev.off()
 ```
