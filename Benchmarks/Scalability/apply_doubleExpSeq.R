@@ -25,7 +25,7 @@ run_doubleExpSeq <- function(L,countData,tx2gene) {
     dim(quantsf_counts)
     tx2gene <- tx2gene[tx2gene$TXNAME %in% rownames(quantsf_counts),]
     
-    if(dim(quantsf_counts)[1] > i){
+    if(dim(quantsf_counts)[1] > j){
     
         ## select transcripts
         k <- 1
@@ -96,15 +96,15 @@ run_doubleExpSeq <- function(L,countData,tx2gene) {
     }
   })
   
-  output_limmaDiffsplice <- list(session_info = session_info,
-                                 info = list(size = j, 
+  output_DoubleExpSeq <- list(session_info = session_info,
+                                 info = list(size = i, 
                                              TXs = nrow(quantsf_counts)),
                                  timing = timing,
 				 removed = removed,
 				 memory = mem,
                                  result = finalResult)
   
-  assign("result", output_limmaDiffsplice, envir=globalenv())
+  assign("result", output_DoubleExpSeq, envir=globalenv())
   rm(list = ls())
   gc()
 }

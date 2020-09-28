@@ -24,7 +24,7 @@ run_limmaDiffsplice <- function(L,countData,tx2gene) {
     dim(quantsf_counts)
     tx2gene <- tx2gene[tx2gene$TXNAME %in% rownames(quantsf_counts),]
     
-    if(dim(quantsf_counts)[1] > i){
+    if(dim(quantsf_counts)[1] > j){
     
         ## select transcripts
         k <- 1

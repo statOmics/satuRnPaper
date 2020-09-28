@@ -25,7 +25,7 @@ run_DRIMSeq <- function(L,countData,tx2gene) {
     dim(quantsf_counts)
     tx2gene <- tx2gene[tx2gene$TXNAME %in% rownames(quantsf_counts),]
     
-    if(dim(quantsf_counts)[1] > i){
+    if(dim(quantsf_counts)[1] > j){
     
         ## select transcripts
         k <- 1
@@ -101,7 +101,7 @@ run_DRIMSeq <- function(L,countData,tx2gene) {
   })
   
   output_DRIMSeq <- list(session_info = session_info,
-                                 info = list(size = j, 
+                                 info = list(size = i, 
                                              TXs = nrow(quantsf_counts)),
                                  timing = timing,
 				 removed = removed,
