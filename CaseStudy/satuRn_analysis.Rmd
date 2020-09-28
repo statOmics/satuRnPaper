@@ -6,18 +6,18 @@ output: html_document
 # Load libraries
 
 ```{r,message=FALSE}
-## for data import
+# for data import
 library(AnnotationHub)
 library(ensembldb)
 library(openxlsx)
 
-## for analysis
+# for analysis
 library(qbDTU)
 library(edgeR)
 library(tidyverse)
 library(SummarizedExperiment)
 
-## for visualization
+# for visualization
 library(ggplot2)
 ```
 
@@ -244,10 +244,36 @@ for (i in seq_along(plots)) {
 }
 ```
 
+
+# GSEA
+
+Save DTU transcripts for contrasts 5, 6 and 7 to perform a DTU analysis (MSigDB)
+
+```{r}
+DTU_tx <-  rownames(rowData(sumExp)[[5+3]][rowData(sumExp)[[5+3]]$empirical_FDR <= 0.05 & !is.na(rowData(sumExp)[[5+3]]$estimates),])
+DTU_gene <- tx2gene[which(tx2gene$TXNAME %in% DTU_tx), "GENEID"]
+sink(file = "GSEA/Tasic_L5IT_contrast5_DTU_satuRn.txt")
+cat(DTU_gene, "\n")
+sink()
+
+DTU_tx <-  rownames(rowData(sumExp)[[6+3]][rowData(sumExp)[[6+3]]$empirical_FDR <= 0.05 & !is.na(rowData(sumExp)[[6+3]]$estimates),])
+DTU_gene <- tx2gene[which(tx2gene$TXNAME %in% DTU_tx), "GENEID"]
+sink(file = "GSEA/Tasic_L5IT_contrast6_DTU_satuRn.txt")
+cat(DTU_gene, "\n")
+sink()
+
+DTU_tx <-  rownames(rowData(sumExp)[[7+3]][rowData(sumExp)[[7+3]]$empirical_FDR <= 0.05 & !is.na(rowData(sumExp)[[7+3]]$estimates),])
+DTU_gene <- tx2gene[which(tx2gene$TXNAME %in% DTU_tx), "GENEID"]
+sink(file = "GSEA/Tasic_L5IT_contrast7_DTU_satuRn.txt")
+cat(DTU_gene, "\n")
+sink()
+```
+
 # Save final object
 
 Save resulting object for later comparison of results with limma
 
 ```{r}
-saveRDS(sumExp, "sumExp.Rds")
+#saveRDS(sumExp, "sumExp.Rds")
+sumExp <- readRDS(file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Case_study_L5It/sumExp.Rds")
 ```
