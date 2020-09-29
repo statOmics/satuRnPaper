@@ -161,7 +161,9 @@ L[c("VISp.L5_IT_VISp_Whrn_Tox2", "ALM.L5_IT_ALM_Tmem163_Arhgap25"), 8] <- c(1,-1
 # with TREAT (~fold-change threshold)
 resultsTreat <- apply(L, 2, function(i) glmTreat(glmfit=fit_stringent, contrast=i, lfc=1))
 topTreat <- lapply(resultsTreat, topTags, n=nrow(y)) # takes about four minutes
+save(topTreat, file="topTreat_DGE.Rda") # save to access later in comparison script
 
+# show number of DE genes
 sigsTreat_5 <- c()
 for (i in seq_along(topTreat)) {
   sigsTreat_5 <- c(sigsTreat_5,sum(topTreat[[i]]$table$FDR <= 0.05))
