@@ -547,7 +547,7 @@ if(TRUE) {
         TasicDtuBenchmark_DRIMSeq,
         TasicDtuBenchmark_edgeRdiffsplice,
         TasicDtuBenchmark_DoubleExpSeq,
-        file='02_Tasic_DTU_analysis_full_count.Rdata'
+        file='02_Tasic_DTU_analysis_count.Rdata'
     )
     
     # save(
@@ -557,7 +557,7 @@ if(TRUE) {
     #     TasicDtuBenchmark_DRIMSeq,
     #     TasicDtuBenchmark_edgeRdiffsplice,
     #     TasicDtuBenchmark_DoubleExpSeq,
-    #     file='02_Tasic_DTU_analysis_full_scaledTPM.Rdata'
+    #     file='02_Tasic_DTU_analysis_scaledTPM.Rdata'
     # )
 }
 ```

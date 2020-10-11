@@ -218,6 +218,28 @@ for (i in seq_along(plots)) {
 }
 ```
 
+```{r}
+plots <- qbDTU::plotDTU(object = sumExp, contrast = "C6", groups = list(group1,group2), coefficients = list(c(0,0,0,0,0,0,0,0,0,0,0,0,1,0),c(0,0,0,0,0,0,0,0,1,0,0,0,0,0)), summaryStat = "model", transcripts = "ENSMUST00000081554",genes = NULL,top.n = 6)
+
+current_plot <- plots[[1]]  + 
+  scale_fill_manual(labels = c("VISp","ALM"), values=c("royalblue4", "firebrick")) +
+  scale_x_discrete(labels= c("Hsd11b1_Endou","Tnc")) +
+   theme(axis.text.x = element_text(angle = 0, 
+            vjust = 1, hjust = 0.5, size = 8)) +
+  ggtitle("Isoform 2 - ENSMUST00000081554")
+  
+  
+png("isoform1_DTU.png",
+    width     = 5,
+    height    = 5,
+    units     = "in",
+    res       = 200,
+    pointsize = 4)
+print(current_plot)
+dev.off()
+```
+
+
 # GSEA
 
 Save DTU transcripts for contrasts 5, 6 and 7 to perform a DTU analysis (MSigDB)

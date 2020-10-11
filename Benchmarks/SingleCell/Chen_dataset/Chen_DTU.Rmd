@@ -581,7 +581,7 @@ if(TRUE) {
         ChenDtuBenchmark_DRIMSeq,
         ChenDtuBenchmark_edgeRdiffsplice,
         ChenDtuBenchmark_DoubleExpSeq,
-        file='02_Chen_DTU_analysis_full_count.Rdata'
+        file='02_Chen_DTU_analysis_count.Rdata'
     )
     
     # save(
@@ -591,7 +591,7 @@ if(TRUE) {
     #     ChenDtuBenchmark_DRIMSeq,
     #     ChenDtuBenchmark_edgeRdiffsplice,
     #     ChenDtuBenchmark_DoubleExpSeq,
-    #     file='02_Chen_DTU_analysis_full_scaledTPM.Rdata'
+    #     file='02_Chen_DTU_analysis_scaledTPM.Rdata'
     # )
 }
 ```

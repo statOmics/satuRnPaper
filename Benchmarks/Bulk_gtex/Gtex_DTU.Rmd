@@ -601,25 +601,10 @@ if(TRUE) {
         gtexDtuBenchmark_limmaDiffsplice,
         gtexDtuBenchmark_edgeRdiffsplice,
         gtexDtuBenchmark_DoubleExpSeq,
-        file='02_Gtex_DTU_analysis_2017_count.Rdata'
+        file='02_gtex_DTU_analysis_2017_count.Rdata'
     )
 }
 ```
-
-
-```{r}
-load(file='02_Gtex_DTU_analysis_filter_2017_full.Rdata')
-```
-
-```{r}
-
-```
-
-
-
-
-
-
 
 
 

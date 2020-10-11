@@ -582,7 +582,7 @@ if(TRUE) {
         DmDtuBenchmark_DEXSeq,
         DmDtuBenchmark_DRIMSeq,
         DmDtuBenchmark_NBSplice,
-        file='02_Dmelanogaster_benchmark_DTU_analysis_ECC_count.Rdata'
+        file='02_Dmelanogaster_benchmark_DTU_analysis_count.Rdata'
     )
     
     # save(
@@ -593,7 +593,7 @@ if(TRUE) {
     #     DmDtuBenchmark_DEXSeq,
     #     DmDtuBenchmark_DRIMSeq,
     #     DmDtuBenchmark_NBSplice,
-    #     file='02_Dmelanogaster_benchmark_DTU_analysis_ECC_tpm.Rdata'
+    #     file='02_Dmelanogaster_benchmark_DTU_analysis_scaledTPM.Rdata'
     # )
 }
 ```

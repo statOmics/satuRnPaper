@@ -15,9 +15,9 @@ library(tidyverse)
 Load data
 
 ```{r}
-sumExp <- readRDS(file="sumExp.Rds")
-limmaRes_all <- readRDS(file="limmaRes_all.Rds")
-load("topTreat_DGE.Rda")
+sumExp <- readRDS(file="/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Case_study_L5It/sumExp.Rds")
+limmaRes_all <- readRDS(file="/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Case_study_L5It/limmaRes_all.Rds")
+load("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Case_study_L5It/topTreat_DGE.Rda")
 ```
 
 Get ranks (in terms of significance) for each transcript in both mehtods
@@ -210,16 +210,6 @@ plot_7C[[1]] +
 
 # dev.off()
 ```
-
-```{r}
-
-variable = factor("ENSMUST00000106956")
-padj = 1
-
-plot_7C[[1]]
-```
-
-
 
 
 

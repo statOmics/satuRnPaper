@@ -590,7 +590,7 @@ if(TRUE) {
         loveDtuBenchmark_DEXSeq,
         loveDtuBenchmark_DRIMSeq,
         loveDtuBenchmark_NBSplice,
-        file='02_love_et_al_benchmark_DTU_analysis_ECC_count.Rdata'
+        file='02_Love_benchmark_DTU_analysis_count.Rdata'
     )
     
     # save(
@@ -601,7 +601,7 @@ if(TRUE) {
     #     loveDtuBenchmark_DEXSeq,
     #     loveDtuBenchmark_DRIMSeq,
     #     loveDtuBenchmark_NBSplice,
-    #     file='02_love_et_al_benchmark_DTU_analysis_ECC_tpm.Rdata'
+    #     file='02_Love_benchmark_DTU_analysis_scaledTPM.Rdata'
     # )
     
 }

@@ -259,9 +259,9 @@ names(loveBenchmarkDataStringent) <- names(nrRepList)
 Save dataset
 
 ```{r}
-save(loveBenchmarkDataLenient, loveBenchmarkDataStringent, file='/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Bulk_simulations/Love_dataset_ECC/01_love_et_al_benchmark_data_ECC_counts.Rdata')
+save(loveBenchmarkDataLenient, loveBenchmarkDataStringent, file='/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Bulk_simulations/Love_dataset_ECC/01_Love_benchmark_data_counts.Rdata')
 
-# save(loveBenchmarkDataLenient, loveBenchmarkDataStringent, file='/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Bulk_simulations/Love_dataset_ECC/01_love_et_al_benchmark_data_ECC_tpm.Rdata') # if scaledTPM instead of raw counts
+# save(loveBenchmarkDataLenient, loveBenchmarkDataStringent, file='/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Benchmarks/Bulk_simulations/Love_dataset_ECC/01_Love_benchmark_data_scaledTPM.Rdata') # if scaledTPM instead of raw counts
 ```
 
 

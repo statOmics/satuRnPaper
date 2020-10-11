@@ -14,8 +14,8 @@ Load truth file
 ### Load and concatenate data
 if(TRUE) {
 
-    #load(file='01_Darmanis_benchmark_data.Rdata')
-    load(file="01_Darmanis_benchmark_data_scaledTPM.Rdata")
+    load(file='01_Darmanis_benchmark_data_count.Rdata')
+    #load(file="01_Darmanis_benchmark_data_scaledTPM.Rdata")
   
     ### Concatenate
     metaInfo <- c(
@@ -31,8 +31,8 @@ Load DTU performance data
 
 ```{r}
 if(TRUE) {
-    #load(file='02_Darmanis_DTU_analysis_full.Rdata')
-    load(file="02_Darmanis_DTU_analysis_full_scaledTPM.Rdata")  
+    load(file='02_Darmanis_DTU_analysis_count.Rdata')
+    #load(file="02_Darmanis_DTU_analysis_scaledTPM.Rdata")  
   
     DarmanisBenchmark <- c(
         DarmanisDtuBenchmark_quasiBinomial,
@@ -191,14 +191,14 @@ visualize_datasets <- function(dataset,metaInfo,nFilters,nSampleSizes,nRep,nmeth
             axis.title.x = element_text(size = 10),
             axis.title.y = element_text(size = 10))
 
-        png(paste("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Results/Darmanis_benchmark/plot_icobra_scaledTPM_", selection2[j], "_", sub("^[^f]*", "", selection[j]), ".png", sep = ""),
-            width     = 5.5,
-            height    = 4.5,
-            units     = "in",
-            res       = 200,
-            pointsize = 4) # start export
+        # png(paste("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Results/Darmanis_benchmark/plot_icobra_count", selection2[j], "_", sub("^[^f]*", "", selection[j]), ".png", sep = ""),
+        #     width     = 5.5,
+        #     height    = 4.5,
+        #     units     = "in",
+        #     res       = 200,
+        #     pointsize = 4) # start export
       print(plot)
-      dev.off()
+      # dev.off()
   }
 }
 ```

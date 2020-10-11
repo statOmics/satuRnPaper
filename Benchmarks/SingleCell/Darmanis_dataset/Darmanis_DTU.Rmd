@@ -288,8 +288,8 @@ Run the analysis for all 8 methods on all (18) Darmanis benchmark datasets
 ```{r}
 if(TRUE) {
     ### Load benchmark data
-    #load(file='01_Darmanis_benchmark_data.Rdata')
-    load(file='01_Darmanis_benchmark_data_scaledTPM.Rdata')
+    load(file='01_Darmanis_benchmark_data_count.Rdata')
+    #load(file='01_Darmanis_benchmark_data_scaledTPM.Rdata')
 
     ### Combine
     names(DarmanisBenchmarkLenient)   <- paste0(names(DarmanisBenchmarkLenient)  , '_filterLenient')
@@ -522,16 +522,6 @@ if(TRUE) {
     names(DarmanisDtuBenchmark_DoubleExpSeq)   <- paste0('DoubleExpSeq_'        , names(DarmanisDtuBenchmark_DoubleExpSeq))
     
     ### Save result
-    # save(
-    #     DarmanisDtuBenchmark_quasiBinomial,
-    #     DarmanisDtuBenchmark_limmaDiffsplice,
-    #     DarmanisDtuBenchmark_DEXSeq,
-    #     DarmanisDtuBenchmark_DRIMSeq,
-    #     DarmanisDtuBenchmark_edgeRdiffsplice,
-    #     DarmanisDtuBenchmark_DoubleExpSeq,
-    #     file='02_Darmanis_DTU_analysis_full.Rdata'
-    # )
-    
     save(
         DarmanisDtuBenchmark_quasiBinomial,
         DarmanisDtuBenchmark_limmaDiffsplice,
@@ -539,8 +529,18 @@ if(TRUE) {
         DarmanisDtuBenchmark_DRIMSeq,
         DarmanisDtuBenchmark_edgeRdiffsplice,
         DarmanisDtuBenchmark_DoubleExpSeq,
-        file='02_Darmanis_DTU_analysis_full_scaledTPM.Rdata'
+        file='02_Darmanis_DTU_analysis_count.Rdata'
     )
+    
+    # save(
+    #     DarmanisDtuBenchmark_quasiBinomial,
+    #     DarmanisDtuBenchmark_limmaDiffsplice,
+    #     DarmanisDtuBenchmark_DEXSeq,
+    #     DarmanisDtuBenchmark_DRIMSeq,
+    #     DarmanisDtuBenchmark_edgeRdiffsplice,
+    #     DarmanisDtuBenchmark_DoubleExpSeq,
+    #     file='02_Darmanis_DTU_analysis_scaledTPM.Rdata'
+    # )
 }
 ```
 

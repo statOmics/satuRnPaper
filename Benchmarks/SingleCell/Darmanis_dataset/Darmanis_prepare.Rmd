@@ -41,9 +41,6 @@ colsums_count <- colSums(darmaniCM)
 colsums_TPM <- colSums(darmaniTPM)
 scale_factors <- colsums_count/colsums_TPM
 
-dim(diag(scale_factors))
-dim(darmaniTPM)
-
 darmaniScaledTPM <- darmaniTPM %*% diag(scale_factors) # scaledTPM input
 colnames(darmaniScaledTPM) <- colnames(darmaniCM)
 
@@ -340,11 +337,19 @@ for (i in 1:length(DarmanisBenchmarkStringent)) {
 ```
 
 ```{r}
-#save(DarmanisBenchmarkLenient, DarmanisBenchmarkStringent, file='01_Darmanis_benchmark_data.Rdata')
-save(DarmanisBenchmarkLenient, DarmanisBenchmarkStringent, file='c')
+save(DarmanisBenchmarkLenient, DarmanisBenchmarkStringent, file='01_Darmanis_benchmark_data_count.Rdata')
+#save(DarmanisBenchmarkLenient, DarmanisBenchmarkStringent, file='01_Darmanis_benchmark_data_scaledTPM.Rdata')
 ```
 
 
+```{r}
+sum_n <- function(n){
+  x <- 1:n
+  sum(x)
+}
+
+sum_n(3) # 1+2+3
+```
 
 
 
