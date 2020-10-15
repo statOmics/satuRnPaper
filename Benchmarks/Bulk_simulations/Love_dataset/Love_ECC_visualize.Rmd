@@ -78,7 +78,7 @@ get_pvalues <- function(dataset,nrep,nmethods) {
   pvalues <- as.data.frame(pvalues)
   pvalues <- pvalues[order(rownames(pvalues)),]
   
-  colnames(pvalues) <- c("quasiBinomial", "DoubleExpSeq", "limmaDiffsplice", "edgeRDiffsplice", "DEXSeq", "DRIMSeq", "NBSplice")
+  colnames(pvalues) <- c("satuRn", "DoubleExpSeq", "limmaDiffsplice", "edgeRDiffsplice", "DEXSeq", "DRIMSeq", "NBSplice")
 
   return(pvalues)
 }
