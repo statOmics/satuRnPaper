@@ -17,25 +17,33 @@ quantsf_counts <- quantsf_counts[which(rowSums(quantsf_counts)!=0),]
 
 metaData <- read.csv("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Chen_data/Chen_metadata.csv")
 
-dir <- "/Volumes/ExternalDrive/DTU_project/Data/Chen/"
-samples <- read.table(file.path(dir, "SRRIDChen.txt"), header = FALSE)
-files <- file.path(dir, samples$V1, "quant.sf")
-names(files) <- paste0("sample", 1:length(samples$V1))
-files <- files[which(file.exists(files))]
-
-selected <- unname(substring(files,47,56))
-colnames(quantsf_counts) <- selected
-
 rownames(metaData) <- metaData$Run
 metaData <- metaData[colnames(quantsf_counts),]
+```
 
-#rm(access,samples,dir,files,selected)
-invisible(gc())
+```{r, message=FALSE}
+library(AnnotationHub)
+## Load the annotation resource.
+ah <- AnnotationHub()
+
+## Query for all available EnsDb databases
+all <- query(ah, "EnsDb")
+
+library(ensembldb)
+
+ahEdb <- all[["AH75036"]] #for Mus musculus
+
+txs <- transcripts(ahEdb)
 ```
 
 ```{r}
 ### Extract gene info
-txInfo <- tx2gene ## from the Chen_getData.Rmd script
+tx2gene <- as.data.frame(matrix(data = NA, nrow = length(txs), ncol = 2))
+colnames(tx2gene) <- c("TXNAME","GENEID")
+tx2gene$TXNAME <- txs$tx_id
+tx2gene$GENEID <- txs$gene_id
+
+txInfo <- tx2gene
 colnames(txInfo) <- c('isoform_id','gene_id')
 rownames(txInfo) <- NULL
 
@@ -43,11 +51,12 @@ txInfo <- txInfo[which(
     ! grepl('^ERCC-', txInfo$isoform_id )
 ),]
 
-
 txInfo <- txInfo[which(txInfo$isoform_id %in% sub("\\..*", "", rownames(quantsf_counts))),]
 
 txInfo$isoform_id <- rownames(quantsf_counts)[match(txInfo$isoform_id,sub("\\..*", "", rownames(quantsf_counts)))]
+```
 
+```{r}
 ## Select a homogeneous set of cells
 metaData <- metaData[which(metaData$Cell_type == "Epi" & metaData$sex == "female"),]
 quantsf_counts <- quantsf_counts[,as.character(metaData$Run)]
@@ -97,7 +106,6 @@ table(sapply(nrRepList, length))
 ```{r}
 dim(quantsf_counts)
 ```
-
 
 Generate lenient benchmark
 

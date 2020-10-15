@@ -56,6 +56,11 @@ sum(quantsf$counts==0)/(sum(quantsf$counts==0)+sum(quantsf$counts!=0))
 ```
 
 ```{r}
+selected <- unname(substring(files,47,56))
+colnames(quantsf$counts) <- selected
+```
+
+```{r}
 saveRDS(quantsf$counts, file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Chen_data/quantsf_count")
 #saveRDS(quantsf$counts, file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/new_analysis/Data/Chen_data/quantsf_scaledTPM")
 ```
