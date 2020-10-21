@@ -34,14 +34,23 @@ txInfo$diffRank <- abs(txInfo$rank_limma - txInfo$rank_qbDTU) # difference in ra
 
 When we inspected the transcripts that were highly ranked in the top DTU list of limma diffsplice but lowly ranked in our top list, we found that most of these transcripts originate from genes that are lowly expressed;
 
-## Global comparison
+## Global comparison (for contrast 6)
 
 Get gene-level counts
 
 ```{r}
-totalCount <- qbDTU:::getTotalCount(assay(sumExp), txInfo)
+quant_sf_current <- assay(sumExp)[,sumExp$group %in% c("VISp.L5_IT_VISp_Hsd11b1_Endou", "ALM.L5_IT_ALM_Tnc")] # get only cells from contrast 6
+
+totalCount <- qbDTU:::getTotalCount(quant_sf_current, txInfo)
 mean_tot <- rowMeans(totalCount) # summarize gene-level counts as the mean over all cells
 ```
+
+Get fraction of zeros
+
+```{r}
+frac_zero <- rowSums(quant_sf_current == 0)/ncol(quant_sf_current)
+```
+
 
 Identify DTU transcripts in both methods
 
@@ -66,30 +75,65 @@ DTU_all[which(DTU_all==TRUE)] <- "limmaDiffsplice"
 DTU_all[which(qbDTU==TRUE)] <- "satuRn"
 DTU_all[which(both==TRUE)] <- "both"
 DTU_all[which(DTU_all==FALSE)] <- "none"
-gg_data <- as.data.frame(cbind(names(DTU_all),unname(DTU_all),mean_tot))
-colnames(gg_data) <- c("transcript","method","totalCount")
+gg_data <- as.data.frame(cbind(names(DTU_all),unname(DTU_all),mean_tot,frac_zero))
+colnames(gg_data) <- c("transcript","method","totalCount","frac_zero")
 gg_data$method <- as.factor(gg_data$method)
 gg_data$totalCount <- as.numeric(gg_data$totalCount)
+gg_data$frac_zero <- as.numeric(gg_data$frac_zero)
+
+gg_data$method <- factor(gg_data$method, levels = c("satuRn","both","limmaDiffsplice","none"))
 ```
 
-Make plot
+Make plot of gene-level count of the transcripts uniquely identified as DTU by satuRn or limma diffsplice, or by both methods.
 
 ```{r}
-# png("CaseStudy_results/totalCount.png",
-#   width     = 5,
-#   height    = 5,
-#   units     = "in",
-#   res       = 200,
-#   pointsize = 4)
+png("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Results/CaseStudy/totalCount.png",
+  width     = 4.5,
+  height    = 3.5,
+  units     = "in",
+  res       = 400,
+  pointsize = 4)
 ggplot(data = gg_data[-which(gg_data$method == "none"),], aes(x=method,y=totalCount,fill=method)) +
   geom_boxplot() +
   scale_y_log10() +
   theme_classic() +
-  scale_fill_manual(values=c("grey84","#0072B2","black"))
-# dev.off()
+  scale_fill_manual(values=c("black","grey84","#0072B2")) +
+  ylab("gene-level count") +
+  ggtitle("Average gene-level counts of DTU transcripts") +
+  theme(plot.title = element_text(size = 10))
+dev.off()
 ```
 
-## Example
+Make plot of the fraction of non-zero counts in the transcripts uniquely identified as DTU by satuRn or limma diffsplice, or by both methods.
+
+```{R}
+gg_data$frac_non_zero <- 1-gg_data$frac_zero
+
+png("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Results/CaseStudy/frac_nonZero.png",
+  width     = 4.5,
+  height    = 3.5,
+  units     = "in",
+  res       = 400,
+  pointsize = 4)
+
+ggplot(data = gg_data[-which(gg_data$method == "none"),], aes(x=method,y=frac_non_zero,fill=method)) +
+  geom_violin() +
+  geom_jitter(aes(colour=method),width = 0.1) +
+  theme_classic() +
+  scale_fill_manual(values=c("black","grey84","#0072B2")) +
+  scale_color_manual(values=c("grey60","black","black")) +
+  ylim(0,1) +
+  ggtitle("Fraction of non-zero counts in DTU transcripts") +
+  stat_summary(fun=median, geom="point", shape=18, size=5, col="darkgreen") +
+  ylab("fraction_non_zero")  +
+  theme(plot.title = element_text(size = 10))
+
+dev.off()
+```
+
+
+
+## Examples
 
 As a consequence, transcripts belonging to lowly expressed genes are correctly considered less informative in satuRn and are thus less likely to be picked up. In Figure 7A, we show that while our method estimates a mean usage of 7% in Tnc cells and 26% in Hsd11b1 Endou cells (indicated by the gold diamond), the transcript is not identified as differentially used, given the low abundance of the corresponding gene and the highly dispersed single-cell level observations.
 

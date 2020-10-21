@@ -14,33 +14,33 @@ Read all results
 
 ```{r}
 # read quasiBinomial results
-load("Data/Scalability/Scalability/finalOutput_quasiBinomial_1.RData")
-load("Data/Scalability/finalOutput_quasiBinomial_2.RData")
+load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_quasiBinomial_1.RData")
+load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_quasiBinomial_2.RData")
 
 # read limmaDiffsplice results
-load("Data/Scalability/finalOutput_limmaDiffsplice_1.RData")
-load("Data/Scalability/finalOutput_limmaDiffsplice_2.RData")
+load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_limmaDiffsplice_1.RData")
+load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_limmaDiffsplice_2.RData")
 
 # read edgeRDiffsplice results
-load("Data/Scalability/finalOutput_edgeRDiffsplice_1.RData")
-load("Data/Scalability/finalOutput_edgeRDiffsplice_2.RData")
+load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_edgeRDiffsplice_1.RData")
+load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_edgeRDiffsplice_2.RData")
 
 # read DRIMSeq results
-load("Data/Scalability/finalOutput_DRIMSeq_1.RData")
-load("Data/Scalability/finalOutput_DRIMSeq_2.RData")
+load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_DRIMSeq_1.RData")
+load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_DRIMSeq_2.RData")
 
 # read DoubleExpSeq results
-load("Data/Scalability/finalOutput_DoubleExpSeq_1.RData")
-load("Data/Scalability/finalOutput_DoubleExpSeq_2.RData")
+load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_DoubleExpSeq_1.RData")
+load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_DoubleExpSeq_2.RData")
 
 # read DEXSeq results
-load("Data/Scalability/finalOutput_DEXSeq_2.RData")
-load("Data/Scalability/finalOutput_DEXSeq_3.RData")
-load("Data/Scalability/finalOutput_DEXSeq_4.RData")
+load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_DEXSeq_2.RData")
+load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_DEXSeq_3.RData")
+load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_DEXSeq_4.RData")
 
 # read BANDITS results
-load("Data/Scalability/finalOutput_BANDITS_5.RData")
-load("Data/Scalability/finalOutput_BANDITS_6.RData")
+load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_BANDITS_5.RData")
+load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_BANDITS_6.RData")
 ```
 
 Concatenate all results
@@ -202,7 +202,7 @@ png("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Results/Scalability/scale_trans
 ggplot(data = data_16cells[-which(data_16cells$method %in% c("BANDITS", "DEXSeq","DRIMSeq")),], aes(x=TXs,y=elapsed/60,color=method)) +
   geom_line() +
   geom_point() +
-  scale_color_manual(values=c("#CC79A7", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2","black")) +
+  scale_color_manual(values=c("#56B4E9", "#F0E442", "#0072B2","black")) +
   theme_bw() +
   ylab("elapsed  time (min)") + 
   xlab("number of transcripts")
