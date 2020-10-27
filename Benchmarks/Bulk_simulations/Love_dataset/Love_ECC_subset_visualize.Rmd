@@ -3,8 +3,6 @@ title: "Love_ECC_subset_visualize"
 output: html_document
 ---
 
-To generate figure S1
-
 ```{r,message=FALSE}
 library(tidyverse)
 library(iCOBRA)
@@ -14,6 +12,7 @@ Load data
 
 ```{r}
 if(TRUE) {
+
     load(file='02_love_et_al_benchmark_DTU_analysis_ECC_tpm_subset.Rdata')
   
     loveBenchmark <- c(
@@ -42,9 +41,24 @@ if(TRUE) {
         loveDtuBenchmark_BANDITS)
     invisible(gc())
 }
-
-truth_file <- read.table("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Love_data/truth_Love.txt")
 ```
+
+Load and handle truth file
+
+```{r}
+load("simulate.rda") # love
+# define the truth (copy from swimming downstream paper by Love et al.,F1000Research 2018, 7:952)
+txdf <- txdf[match(rownames(tpms), txdf$TXNAME),]
+txdf$dtu.genes <- iso.dtu | iso.dte & !iso.dte.only
+full.dtu.genes <- unique(txdf$GENEID[txdf$dtu.genes])
+
+txp.exprs <- rowSums(tpms) > 0
+dtu.dte.genes <- unique(txdf$GENEID[iso.dte & !iso.dte.only])
+txdf$full.dtu <- iso.dtu | (txdf$GENEID %in% dtu.dte.genes & txp.exprs)
+dtu.txps <- txdf$TXNAME[txdf$full.dtu]
+```
+
+Helper function for visualizing FDR-TPR curves
 
 ```{r}
 get_pvalues <- function(dataset,nrep,nmethods) {
@@ -78,15 +92,13 @@ get_pvalues <- function(dataset,nrep,nmethods) {
   pvalues <- as.data.frame(pvalues)
   pvalues <- pvalues[order(rownames(pvalues)),]
   
-  # colnames(pvalues) <- c("quasiBinomial", "BANDITS", "limmaDiffsplice", "edgeRDiffsplice", "DoubleExpSeq")
-  
-  colnames(pvalues) <- c("quasiBinomial", "DoubleExpSeq", "limmaDiffsplice", "edgeRDiffsplice", "DEXSeq", "DRIMSeq", "NBSplice", "BANDITS")
+  colnames(pvalues) <- c("satuRn", "DoubleExpSeq", "limmaDiffsplice", "edgeRDiffsplice", "DEXSeq", "DRIMSeq", "NBSplice", "BANDITS")
 
   return(pvalues)
 }
 ```
 
-
+Function for visualizing FDR-TPR curves
 
 ```{r}
 visualize_datasets <- function(dataset,nFilters,nSampleSizes,nrep,nmethods) {
@@ -104,42 +116,36 @@ visualize_datasets <- function(dataset,nFilters,nSampleSizes,nrep,nmethods) {
     
     loveBenchmark_current <- loveBenchmark[grepl(selection[j], names(loveBenchmark))]
     
-    # omit edgeR total
-    loveBenchmark_current_1 <- loveBenchmark_current[c(1,4,7,10,13,16,19,22)]
-    loveBenchmark_current_2 <- loveBenchmark_current[c(2,5,8,11,14,17,20,23)]
-    loveBenchmark_current_3 <- loveBenchmark_current[c(3,6,9,12,15,18,21,24)]
+    pvalues <- list()
     
-    pvalues_1 <- get_pvalues(loveBenchmark_current_1,1,nmethods)
-    pvalues_2 <- get_pvalues(loveBenchmark_current_2,1,nmethods)
-    pvalues_3 <- get_pvalues(loveBenchmark_current_3,1,nmethods)
-    
-    pvalues_1[is.na(pvalues_1)] <- 1
-    pvalues_2[is.na(pvalues_2)] <- 1
-    pvalues_3[is.na(pvalues_3)] <- 1
-    
-    pvalues_1 <- pvalues_1[,c(2:8)]
-    pvalues_2 <- pvalues_2[,c(2:8)]
-    pvalues_3 <- pvalues_3[,c(2:8)]
+    for (k in seq_len(nrep)) {
+        
+        # get current repeat of current dataset
+        loveBenchmark_dataset_rep <- loveBenchmark_current[grep(paste0("rep_",k,"_fil"),names(loveBenchmark_current))]
+        pvalues_current <- get_pvalues(loveBenchmark_dataset_rep,1,nmethods)
 
-    truth_file_current_1 <- truth_file[truth_file$TXNAME %in% rownames(pvalues_1),]
-    truth_file_current_1 <- truth_file_current_1[order(truth_file_current_1$TXNAME),]
-    truth_file_current_2 <- truth_file[truth_file$TXNAME %in% rownames(pvalues_2),]
-    truth_file_current_2 <- truth_file_current_2[order(truth_file_current_2$TXNAME),]
-    truth_file_current_3 <- truth_file[truth_file$TXNAME %in% rownames(pvalues_3),]
-    truth_file_current_3 <- truth_file_current_3[order(truth_file_current_3$TXNAME),]
-    
-    rownames(pvalues_1) <- paste0(rownames(pvalues_1), "_1")
-    rownames(pvalues_2) <- paste0(rownames(pvalues_2), "_2")
-    rownames(pvalues_3) <- paste0(rownames(pvalues_3), "_3")
+        pvalues_current[is.na(pvalues_current)] <- 1
 
-    rownames(truth_file_current_1) <- truth_file_current_1$TXNAME <- rownames(pvalues_1)
-    rownames(truth_file_current_2) <- truth_file_current_2$TXNAME <- rownames(pvalues_2)
-    rownames(truth_file_current_3) <- truth_file_current_3$TXNAME <- rownames(pvalues_3)
-    
-    pvalues_full <- rbind(pvalues_1,pvalues_2,pvalues_3)
-    truth_file_full <- rbind(truth_file_current_1,truth_file_current_2,truth_file_current_3)
+        # to allow for calculating average results over repeats, I concatenate thte results over repeats, which requires non-identical rownames
+        rownames(pvalues_current) <- paste0(rownames(pvalues_current),"_",k)
+        
+        # omit satuRn for supplemeentary figure
+        pvalues_current <- pvalues_current[,c(2:8)]
+        
+        pvalues[[k]] <- pvalues_current
+    }
 
-    cobra <- COBRAData(pval = pvalues_full, truth = truth_file_full)
+    # concatenate to get average performance over the three datasets
+    pvalues_full <- rbind(pvalues[[1]],pvalues[[2]],pvalues[[3]])
+    
+    # generate truth file
+    truth_full <- as.data.frame(cbind(rownames(pvalues_full),rep(0,nrow(pvalues_full))))
+    colnames(truth_full) <- c("TXNAME","truth")
+    rownames(truth_full) <- truth_full$TXNAME
+    truth_full$truth <- as.numeric(truth_full$truth)
+    truth_full[which(sub("\\_.*", "", truth_full$TXNAME) %in% dtu.txps),"truth"] <- 1
+
+    cobra <- COBRAData(pval = pvalues_full, truth = truth_full)
     cobra <- calculate_adjp(cobra)
     cobra1perf <- calculate_performance(cobra, binary_truth = "truth", cont_truth = "none", splv = "none", aspects = c("fdrtpr", "fdrtprcurve", "overlap"))
     
@@ -164,7 +170,7 @@ visualize_datasets <- function(dataset,nFilters,nSampleSizes,nrep,nmethods) {
             axis.title.x = element_text(size = 10),
             axis.title.y = element_text(size = 10))
     
-    png(paste("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Results/Love_ECC_benchmark/plot_icobra_subset_tpm_figS1_", j, ".png", sep = ""),
+    png(paste("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Results/Love_ECC_benchmark/plot_icobra_subset_scaledTPM_figS1_", j, ".png", sep = ""),
           width     = 5.5,
           height    = 4.5,
           units     = "in",
@@ -176,6 +182,8 @@ visualize_datasets <- function(dataset,nFilters,nSampleSizes,nrep,nmethods) {
   }
 }
 ```
+
+Generate (amongst others) Figure S1
 
 ```{r}
 visualize_datasets(dataset=loveBenchmark,
