@@ -1,0 +1,268 @@
+---
+title: "Hsapiens_prepare_self"
+output: html_document
+---
+
+```{r, message=FALSE}
+library(edgeR)
+library(DRIMSeq)
+library(tximport)
+```
+
+Load the data
+```{r}
+truth <- read.table(file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Hsapiens_data/3_truth/truth_Hsapiens.txt", sep = "\t", header = TRUE)
+
+conversion <- read.table(file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Hsapiens_data/TranscriptID_conversion.txt")
+
+colnames(conversion) <- c("target_id", "transcript_id")
+conversion$target_id <- as.character(conversion$target_id)
+conversion$transcript_id <- as.character(conversion$transcript_id)
+```
+
+Hsapiens count data
+
+```{r}
+data_dir <- "/Volumes/ExternalDrive/DTU_project/Data/Hsapiens/quantifications/"
+sample_names <- c("sample1/output_1","sample2/output_2","sample3/output_3","sample4/output_4","sample5/output_5","sample6/output_6","sample7/output_7","sample8/output_8","sample9/output_9","sample10/output_10")
+quant_files <- file.path(data_dir, sample_names, "abundance.h5")
+file.exists(quant_files)
+
+txi<- tximport(files = quant_files, type = "kallisto", txOut = TRUE, countsFromAbundance="no")
+```
+
+```{r}
+txInfo <- as.data.frame(cbind(as.character(truth$gene_id), as.character(truth$transcript_id), as.character(truth$transcript_ds_status)))
+
+colnames(txInfo) <- c("gene_id", "transcript_id", "gene_modified")
+txInfo$gene_id <- as.character(txInfo$gene_id)
+txInfo$transcript_id <- as.character(txInfo$transcript_id)
+txInfo <- txInfo[,c(2,1,3)] # change order in same way as other benchmarks
+```
+
+Lenient filtering
+
+```{r}
+Hs_lenient <- as.data.frame(txi$counts)
+txInfo_lenient <- txInfo
+
+group <- as.factor(rep(c(0,1),each=5))
+design <- model.matrix(~group)
+sampleData <- design
+sampleData[,1] <- colnames(Hs_lenient)
+colnames(sampleData) <- c("sample_id", "condition")
+
+Hs_lenient <- edgeR::DGEList(counts = Hs_lenient,group=group)
+filter <- edgeR::filterByExpr(Hs_lenient,design=design)
+            
+Hs_lenient <- Hs_lenient$counts[filter,]
+
+## Reorder corresponding info
+txInfo_lenient <- txInfo_lenient[match(
+    rownames(Hs_lenient), txInfo_lenient$transcript_id
+),]
+
+## Filter out genes with one TX
+txInfo_lenient <- txInfo_lenient[txInfo_lenient$gene_id %in% names(table(txInfo_lenient$gene_id))[table(txInfo_lenient$gene_id) > 1],]
+
+Hs_lenient <- Hs_lenient[txInfo_lenient$transcript_id,]
+
+## add column with sample size for easy retrieval
+txInfo_lenient$nrSamplesPerCondition <- 5
+
+colnames(txInfo_lenient) <- c('TXNAME','GENEID','gene_modified','nrSamplesPerCondition')
+
+HsBenchmarkLenient <- list(
+            data     = as.data.frame(Hs_lenient),
+            design   = as.data.frame(sampleData),
+            metaInfo = txInfo_lenient
+)
+
+dim(HsBenchmarkLenient$data)
+```
+
+Stringent filtering
+
+```{r}
+Hs_stringent <- as.data.frame(txi$counts)
+txInfo_stringent <- txInfo
+group <- as.factor(rep(c(0,1),each=5))
+design <- model.matrix(~group)
+sampleData <- design
+sampleData[,1] <- colnames(Hs_stringent)
+colnames(sampleData) <- c("sample_id", "condition")
+
+Hs_stringent <- Hs_stringent[rownames(Hs_stringent)%in%txInfo$transcript_id,]
+
+geneForEachTx <- txInfo[match(rownames(Hs_stringent),txInfo$transcript_id),"gene_id"]
+
+Hs_stringent$gene_id <- geneForEachTx
+Hs_stringent$feature_id <- row.names(Hs_stringent)
+
+d <- DRIMSeq::dmDSdata(counts = Hs_stringent, samples = as.data.frame(sampleData))
+d <- dmFilter(d,
+              min_samps_feature_expr=5, 
+              min_feature_expr=10, 
+              min_samps_feature_prop=5, 
+              min_feature_prop=0.1,
+              min_samps_gene_expr=10, 
+              min_gene_expr=10
+              )
+
+Hs_stringent <- as.data.frame(txi$counts)[counts(d)$feature_id,]
+
+## Reorder corresponding info
+txInfo_stringent <- txInfo_stringent[match(
+    rownames(Hs_stringent), txInfo_stringent$transcript_id
+),]
+
+## Filter out genes with one TX
+txInfo_stringent <- txInfo_stringent[txInfo_stringent$gene_id %in% names(table(txInfo_stringent$gene_id))[table(txInfo_stringent$gene_id) > 1],]
+
+Hs_stringent <- Hs_stringent[txInfo_stringent$transcript_id,]
+
+## add truth column
+txInfo_stringent$gene_modified <- truth$transcript_ds_status[match(txInfo_stringent$transcript_id,as.character(truth$transcript_id))]
+
+## add column with sample size for easy retrieval
+txInfo_stringent$nrSamplesPerCondition <- 5
+
+colnames(txInfo_stringent) <- c('TXNAME','GENEID','gene_modified','nrSamplesPerCondition')
+
+HsBenchmarkStringent <- list(
+            data     = as.data.frame(Hs_stringent),
+            design   = as.data.frame(sampleData),
+            metaInfo = txInfo_stringent
+)
+
+dim(HsBenchmarkStringent$data)
+```
+
+```{r}
+save(HsBenchmarkLenient, HsBenchmarkStringent, file='01_Hsapiens_benchmark_data_count_self.Rdata')
+```
+
+
+---
+
+Hsapiens scaledTPM data
+
+```{r}
+data_dir <- "/Volumes/ExternalDrive/DTU_project/Data/Hsapiens/quantifications/"
+
+sample_names <- c("sample1/output_1","sample2/output_2","sample3/output_3","sample4/output_4","sample5/output_5","sample6/output_6","sample7/output_7","sample8/output_8","sample9/output_9","sample10/output_10")
+quant_files <- file.path(data_dir, sample_names, "abundance.h5")
+file.exists(quant_files)
+
+txi<- tximport(files = quant_files, type = "kallisto", txOut = TRUE, countsFromAbundance="scaledTPM")
+
+txi$counts[1:3,1:3]
+```
+
+Lenient filtering
+
+```{r}
+Hs_lenient <- as.data.frame(txi$counts)
+txInfo_lenient <- txInfo
+
+group <- as.factor(rep(c(0,1),each=5))
+design <- model.matrix(~group)
+sampleData <- design
+sampleData[,1] <- colnames(Hs_lenient)
+colnames(sampleData) <- c("sample_id", "condition")
+
+Hs_lenient <- edgeR::DGEList(counts = Hs_lenient,group=group)
+filter <- edgeR::filterByExpr(Hs_lenient,design=design)
+            
+Hs_lenient <- Hs_lenient$counts[filter,]
+
+## Reorder corresponding info
+txInfo_lenient <- txInfo_lenient[match(
+    rownames(Hs_lenient), txInfo_lenient$transcript_id
+),]
+
+## Filter out genes with one TX
+txInfo_lenient <- txInfo_lenient[txInfo_lenient$gene_id %in% names(table(txInfo_lenient$gene_id))[table(txInfo_lenient$gene_id) > 1],]
+
+Hs_lenient <- Hs_lenient[txInfo_lenient$transcript_id,]
+
+## add column with sample size for easy retrieval
+txInfo_lenient$nrSamplesPerCondition <- 5
+
+colnames(txInfo_lenient) <- c('TXNAME','GENEID','gene_modified','nrSamplesPerCondition')
+
+HsBenchmarkLenient <- list(
+            data     = as.data.frame(Hs_lenient),
+            design   = as.data.frame(sampleData),
+            metaInfo = txInfo_lenient
+)
+
+dim(HsBenchmarkLenient$data)
+```
+
+Stringent filtering
+
+```{r}
+Hs_stringent <- as.data.frame(txi$counts)
+txInfo_stringent <- txInfo
+
+group <- as.factor(rep(c(0,1),each=5))
+design <- model.matrix(~group)
+sampleData <- design
+sampleData[,1] <- colnames(Hs_stringent)
+colnames(sampleData) <- c("sample_id", "condition")
+
+Hs_stringent <- Hs_stringent[rownames(Hs_stringent)%in%txInfo$transcript_id,]
+
+geneForEachTx <- txInfo[match(rownames(Hs_stringent),txInfo$transcript_id),"gene_id"]
+
+Hs_stringent$gene_id <- geneForEachTx
+Hs_stringent$feature_id <- row.names(Hs_stringent)
+
+d <- DRIMSeq::dmDSdata(counts = Hs_stringent, samples = as.data.frame(sampleData))
+d <- dmFilter(d,
+              min_samps_feature_expr=5, 
+              min_feature_expr=10, 
+              min_samps_feature_prop=5, 
+              min_feature_prop=0.1,
+              min_samps_gene_expr=10, 
+              min_gene_expr=10
+              )
+
+Hs_stringent <- as.data.frame(txi$counts)[counts(d)$feature_id,]
+
+## Reorder corresponding info
+txInfo_stringent <- txInfo_stringent[match(
+    rownames(Hs_stringent), txInfo_stringent$transcript_id
+),]
+
+## Filter out genes with one TX
+txInfo_stringent <- txInfo_stringent[txInfo_stringent$gene_id %in% names(table(txInfo_stringent$gene_id))[table(txInfo_stringent$gene_id) > 1],]
+
+Hs_stringent <- Hs_stringent[txInfo_stringent$transcript_id,]
+
+## add truth column
+txInfo_stringent$gene_modified <- truth$transcript_ds_status[match(txInfo_stringent$transcript_id,as.character(truth$transcript_id))]
+
+## add column with sample size for easy retrieval
+txInfo_stringent$nrSamplesPerCondition <- 5
+
+colnames(txInfo_stringent) <- c('TXNAME','GENEID','gene_modified','nrSamplesPerCondition')
+
+HsBenchmarkStringent <- list(
+            data     = as.data.frame(Hs_stringent),
+            design   = as.data.frame(sampleData),
+            metaInfo = txInfo_stringent
+)
+
+dim(HsBenchmarkStringent$data)
+```
+
+```{r}
+save(HsBenchmarkLenient, HsBenchmarkStringent, file='01_Hsapiens_benchmark_data_scaledTPM_self.Rdata')
+```
+
+
+
+
+

@@ -1,0 +1,70 @@
+---
+title: "Chen_getData"
+output: html_document
+---
+
+I must still add the bash script for the salmon quantification
+
+```{r}
+dir <- "/Volumes/ExternalDrive/DTU_project/Data/Chen/"
+samples <- read.table(file.path(dir, "SRRIDChen.txt"), header = FALSE)
+head(samples)
+```
+
+```{r}
+files <- file.path(dir, samples$V1, "quant.sf")
+names(files) <- paste0("sample", 1:length(samples$V1))
+all(file.exists(files))
+```
+
+```{r, message=FALSE}
+library(AnnotationHub)
+## Load the annotation resource.
+ah <- AnnotationHub()
+
+## Query for all available EnsDb databases
+all <- query(ah, "EnsDb")
+
+library(ensembldb)
+
+ahEdb <- all[["AH75036"]] #for Mus musculus
+
+txs <- transcripts(ahEdb)
+```
+
+```{r}
+tx2gene <- as.data.frame(matrix(data = NA, nrow = length(txs), ncol = 2))
+colnames(tx2gene) <- c("TXNAME","GENEID")
+tx2gene$TXNAME <- txs$tx_id
+tx2gene$GENEID <- txs$gene_id
+```
+
+```{r}
+library(tximport)
+quantsf <- tximport(files, type = "salmon", tx2gene = tx2gene, ignoreTxVersion = TRUE, txOut = TRUE, countsFromAbundance = "no")
+#quantsf <- tximport(files, type = "salmon", tx2gene = tx2gene, ignoreTxVersion = TRUE, txOut = TRUE, countsFromAbundance = "scaledTPM")
+
+# library(BANDITS)
+# eff_len <- eff_len_compute(x_eff_len = quantsf$length)
+# saveRDS(eff_len, "eff_len.Rds")
+```
+
+```{r}
+sum(quantsf$counts==0)/(sum(quantsf$counts==0)+sum(quantsf$counts!=0))
+# 81% zeros on raw counts
+# for the Tasic Benchmark, we had 84.7% zeros on raw counts
+```
+
+```{r}
+selected <- unname(substring(files,47,56))
+colnames(quantsf$counts) <- selected
+```
+
+```{r}
+saveRDS(quantsf$counts, file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Chen_data/quantsf_count")
+#saveRDS(quantsf$counts, file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/new_analysis/Data/Chen_data/quantsf_scaledTPM")
+```
+
+
+
+

@@ -1,0 +1,219 @@
+---
+title: "Darmanis_visualize_2"
+output: html_document
+---
+
+```{r,message=FALSE}
+library(tidyverse)
+library(iCOBRA)
+```
+
+Load truth file
+
+```{r}
+### Load and concatenate data
+if(TRUE) {
+
+    load(file='01_Darmanis_benchmark_data_count.Rdata')
+    #load(file="01_Darmanis_benchmark_data_scaledTPM.Rdata")
+  
+    ### Concatenate
+    metaInfo <- c(
+        DarmanisBenchmarkLenient,DarmanisBenchmarkStringent
+    )
+
+    rm(DarmanisBenchmarkLenient,DarmanisBenchmarkStringent)
+    invisible(gc()) 
+}
+```
+
+Load DTU performance data
+
+```{r}
+if(TRUE) {
+    load(file='02_Darmanis_DTU_analysis_count.Rdata')
+    #load(file="02_Darmanis_DTU_analysis_scaledTPM.Rdata")  
+  
+    DarmanisBenchmark <- c(
+        DarmanisDtuBenchmark_quasiBinomial,
+        DarmanisDtuBenchmark_limmaDiffsplice,
+        DarmanisDtuBenchmark_DEXSeq,
+        DarmanisDtuBenchmark_DRIMSeq,
+        DarmanisDtuBenchmark_edgeRdiffsplice,
+        DarmanisDtuBenchmark_DoubleExpSeq
+    )
+    
+    ### Remove empty enteries (due to not tested - aka to many samples for reasonable runtime)
+    DarmanisBenchmark  <- DarmanisBenchmark[which(
+        sapply(DarmanisBenchmark, function(x) ! is.null(x$dtuAnalysis))
+    )]
+    
+    rm(DarmanisDtuBenchmark_quasiBinomial,
+        DarmanisDtuBenchmark_limmaDiffsplice,
+        DarmanisDtuBenchmark_DEXSeq,
+        DarmanisDtuBenchmark_DRIMSeq,
+        DarmanisDtuBenchmark_edgeRdiffsplice,
+        DarmanisDtuBenchmark_DoubleExpSeq)
+    invisible(gc())
+}
+```
+
+Helper function 1 --> get pvalues for the different methods on the different datasets
+
+```{r}
+get_pvalues <- function(dataset,nrep,nmethods) {
+  
+  get_all_txs <- function(dataset,nrep){
+  
+    all_txs <- c()
+    for (i in 1:nrep) {
+      current_txs <- as.character(dataset[[i]]$dtuAnalysis$TXNAME)
+      all_txs <- c(all_txs, current_txs)
+      all_txs <- unique(all_txs)
+    }
+    return(all_txs)
+  }
+
+  all_txs <- get_all_txs(dataset,nrep)
+  pvalues <- matrix(data=NA, nrow=length(all_txs), ncol=nmethods*nrep)
+  rownames(pvalues) <- all_txs
+  
+  for (i in 1:(nmethods*nrep)) {
+    pvalues_new <- data.frame(dataset[[i]]$dtuAnalysis$p_value)
+    rownames(pvalues_new) <- as.character(dataset[[i]]$dtuAnalysis$TXNAME)
+    colnames(pvalues_new) <- names(dataset)[i]
+
+    pvalues[,i] <- pvalues_new[match(rownames(pvalues),rownames(pvalues_new)),1]
+  }
+  
+  pvalues <- apply(pvalues, 2, as.numeric)
+  rownames(pvalues) <- all_txs
+  pvalues <- as.data.frame(pvalues)
+  pvalues <- pvalues[order(rownames(pvalues)),]
+  
+  if(nmethods == 6){
+    colnames(pvalues) <- c("quasiBinomial", "limma_diffsplice", "DEXSeq", "DRIMSeq","edgeR_diffsplice", "DoubleExpSeq")
+  } else {
+    colnames(pvalues) <- c("quasiBinomial", "limma_diffsplice","edgeR_diffsplice", "DoubleExpSeq")
+  }
+  return(pvalues)
+}
+```
+
+Analysis for all datasets for which we have four methods (sample sizes 5, 10 and 20, all reps, both filterings)
+
+```{r}
+visualize_datasets <- function(dataset,metaInfo,nFilters,nSampleSizes,nRep,nmethods,selection,selection2) {
+
+    count <- 0
+    nPlots <- nFilters * nSampleSizes
+    print(paste("This function will generate",  nPlots, "plots"))
+  
+    for (j in 1:nPlots) {
+        print(j)
+        Tasic_current_outer <- dataset[grepl(selection[j], names(dataset))]
+        metaInfo_current_outer <- metaInfo[grepl(selection2[j], names(metaInfo))]
+
+        resList <- c()
+        count <- count+1
+
+        for (k in 1:length(nRep)) {
+            Tasic_current_inner <- Tasic_current_outer[grepl(nRep[k], names(Tasic_current_outer))]
+
+            metaInfo_current_inner <- metaInfo_current_outer[grepl(nRep[k], names(metaInfo_current_outer))]
+    
+            pvalues <- get_pvalues(Tasic_current_inner,nrep=1,nmethods)
+
+            truth_file <- Tasic_current_inner[[1]]$dtuAnalysis
+    
+            if(count <= nSampleSizes){
+                txSwapped <- metaInfo_current_inner[1]          
+                } else {
+                txSwapped <- metaInfo_current_inner[2]
+            }
+    
+            truth_file <- truth_file[,c("TXNAME","p_value")]
+    
+            txSwapped[[1]]$metaInfo <- txSwapped[[1]]$metaInfo[match(truth_file$TXNAME,txSwapped[[1]]$metaInfo$TXNAME),]
+    
+            truth_file$gene_modified <- as.numeric(txSwapped[[1]]$metaInfo$txSwapped)
+            truth_file <- truth_file[order(truth_file$TXNAME),]
+            rownames(truth_file) <- truth_file$TXNAME
+
+            resList[[k]] <- list(pvalues,truth_file)
+        }
+        
+        rownames(resList[[1]][[1]]) <- paste0(rownames(resList[[1]][[1]]), "_1")
+        rownames(resList[[2]][[1]]) <- paste0(rownames(resList[[2]][[1]]), "_2")
+        rownames(resList[[3]][[1]]) <- paste0(rownames(resList[[3]][[1]]), "_3")
+        
+        pvalues_full <- rbind(resList[[1]][[1]],resList[[2]][[1]],resList[[3]][[1]])
+        
+        rownames(resList[[1]][[2]]) <- paste0(rownames(resList[[1]][[2]]), "_1")
+        rownames(resList[[2]][[2]]) <- paste0(rownames(resList[[2]][[2]]), "_2")
+        rownames(resList[[3]][[2]]) <- paste0(rownames(resList[[3]][[2]]), "_3")
+        
+        truth_file_full <- rbind(resList[[1]][[2]],resList[[2]][[2]],resList[[3]][[2]])
+        
+        cobra <- COBRAData(pval = pvalues_full, truth = truth_file_full)
+        cobra <- calculate_adjp(cobra)
+        cobra1perf <- calculate_performance(cobra, binary_truth = "gene_modified", cont_truth = "none", splv = "none", aspects = c("fdrtpr", "fdrtprcurve", "overlap"))
+
+        cobraplot <- prepare_data_for_plot(cobra1perf, colorscheme = "Dark2", facetted = TRUE)
+        
+        if (nmethods == 6){
+            new_col <- c(rep(c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "black", "#999999"),4),rep("white",14))
+            names(new_col) <- names(cobraplot@plotcolors)
+            cobraplot@plotcolors <- new_col
+    
+            plot <- plot_fdrtprcurve(cobraplot, xaxisrange = c(0, 0.4), yaxisrange = c(0,0.6))
+    
+            titles <- c("20 versus 20 - edgeR filter","20 versus 20 - DRIMSeq filter")
+            current_title <- titles[j]
+        } else {
+            new_col <- c(rep(c("#56B4E9", "#F0E442", "#0072B2", "black", "#999999"),4),rep("white",10))
+            names(new_col) <- names(cobraplot@plotcolors)
+            cobraplot@plotcolors <- new_col
+    
+            plot <- plot_fdrtprcurve(cobraplot, xaxisrange = c(0, 0.3), yaxisrange = c(0,0.8))
+    
+            titles <- c("50 versus 50 - edgeR filter","100 versus 100 - edgeR filter","50 versus 50 - DRIMSeq filter","100 versus 100 - DRIMSeq filter")
+            current_title <- titles[j]
+        }
+
+        plot <- plot + 
+            ggtitle(current_title) +
+            theme(strip.background = element_blank(),
+            strip.text.x = element_blank(),
+            plot.title = element_text(size=10),
+            axis.text.x = element_text(size = 10),
+            axis.text.y = element_text(size = 10),
+            axis.title.x = element_text(size = 10),
+            axis.title.y = element_text(size = 10))
+
+        # png(paste("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Results/Darmanis_benchmark/plot_icobra_count", selection2[j], "_", sub("^[^f]*", "", selection[j]), ".png", sep = ""),
+        #     width     = 5.5,
+        #     height    = 4.5,
+        #     units     = "in",
+        #     res       = 200,
+        #     pointsize = 4) # start export
+      print(plot)
+      # dev.off()
+  }
+}
+```
+
+```{r}
+selection <- c("20_rep_._filterLenient","20_rep_._filterStringent")
+selection2 <- c("20_rep","20_rep")
+
+visualize_datasets(DarmanisBenchmark,metaInfo,nFilters=2,nSampleSizes=1,nRep=c("rep_1","rep_2","rep_3"),nmethods=6,selection = selection,selection2=selection2)
+
+selection <- c("_50_rep_._filterLenient","100_rep_._filterLenient","_50_rep_._filterStringent","100_rep_._filterStringent")
+selection2 <- c("50_rep","100_rep","50_rep","100_rep")
+
+visualize_datasets(DarmanisBenchmark,metaInfo,nFilters=2,nSampleSizes=2,nRep=c("rep_1","rep_2","rep_3"),nmethods=4,selection = selection,selection2=selection2)
+```
+
+
+

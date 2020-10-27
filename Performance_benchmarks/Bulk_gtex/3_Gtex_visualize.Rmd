@@ -1,0 +1,250 @@
+---
+title: "Gtex_visualize_filter"
+output: html_document
+---
+
+```{r,message=FALSE}
+library(tidyverse)
+library(iCOBRA)
+```
+
+Load truth file
+
+```{r}
+### Load and concatenate data
+if(TRUE) {
+
+    load(file="01_gtex_benchmark_data_2017_count.Rdata")
+    #load(file="01_gtex_benchmark_data_2017_scaledTPM.Rdata")
+  
+    ### Concatenate
+    metaInfo <- c(
+        gtexBenchmarkDataLenient,gtexBenchmarkDataStringent
+    )
+
+    rm(gtexBenchmarkDataLenient,gtexBenchmarkDataStringent)
+    invisible(gc()) 
+}
+```
+
+Load DTU performance data
+
+```{r}
+err <- try(library("here", character.only = TRUE), silent = TRUE)
+if (class(err) == 'try-error') {
+    install.packages("here", repos = "https://cloud.r-project.org")
+    library("here", character.only = TRUE)
+}
+wd <- here()
+# Optional: change the working directory
+setwd(wd)
+
+load(file=paste0(wd,"Data/working_data/Gtex_data/02_Gtex_DTU_analysis_2017_count.Rdata"))
+#load(file="02_Gtex_DTU_analysis_2017_scaledTPM_full.Rdata")
+
+gtexBenchmark <- c(
+    gtexDtuBenchmark_DEXSeq,
+    gtexDtuBenchmark_DoubleExpSeq,
+    gtexDtuBenchmark_DRIMSeq,
+    gtexDtuBenchmark_edgeRdiffsplice,
+    gtexDtuBenchmark_limmaDiffsplice,
+    gtexDtuBenchmark_NBSplice,
+    gtexDtuBenchmark_quasiBinomial
+)
+
+### Remove empty enteries (due to not tested - aka too many samples for reasonable runtime)
+gtexBenchmark  <- gtexBenchmark[which(
+    sapply(gtexBenchmark, function(x) ! is.null(x$dtuAnalysis))
+)]
+
+rm(gtexDtuBenchmark_DEXSeq,
+    gtexDtuBenchmark_DRIMSeq,
+    gtexDtuBenchmark_DoubleExpSeq,
+    gtexDtuBenchmark_edgeRdiffsplice,
+    gtexDtuBenchmark_limmaDiffsplice,
+    gtexDtuBenchmark_NBSplice,
+    gtexDtuBenchmark_quasiBinomial)
+invisible(gc())
+```
+
+Helper function 1 --> get pvalues for the different methods on the different datasets
+
+```{r}
+get_pvalues <- function(dataset,nrep,nmethods) {
+  
+  get_all_txs <- function(dataset){
+  
+    all_txs <- c()
+    current_txs <- as.character(dataset[[1]]$dtuAnalysis$TXNAME)
+    all_txs <- c(all_txs, current_txs)
+    all_txs <- unique(all_txs)
+    return(all_txs)
+  }
+
+  all_txs <- get_all_txs(dataset)
+  nmethods <- length(dataset)
+  pvalues <- matrix(data=NA, nrow=length(all_txs), ncol=nmethods)
+  rownames(pvalues) <- all_txs
+  
+  for (i in 1:nmethods) {
+    pvalues_new <- data.frame(dataset[[i]]$dtuAnalysis$p_value)
+    rownames(pvalues_new) <- as.character(dataset[[i]]$dtuAnalysis$TXNAME)
+    colnames(pvalues_new) <- names(dataset)[i]
+
+    pvalues[,i] <- pvalues_new[match(rownames(pvalues),rownames(pvalues_new)),1]
+  }
+  
+  pvalues <- apply(pvalues, 2, as.numeric)
+  rownames(pvalues) <- all_txs
+  pvalues <- as.data.frame(pvalues)
+  pvalues <- pvalues[order(rownames(pvalues)),]
+  colnames(pvalues) <- methods
+
+  return(pvalues)
+}
+```
+
+
+Visualization function
+
+```{r}
+visualize_datasets <- function(dataset,metaInfo,nFilters,nSampleSizes,methods,colors,titles,selection) {
+
+    nPlots <- nFilters * nSampleSizes
+    print(paste("This function will generate",  nPlots, "plots"))
+  
+    # for each of 4 analyses, do:
+    for (j in 1:nPlots) {
+        
+        print(j) # print progress
+        
+        gtexBenchmark_current_outer <- dataset[grepl(selection[j], names(dataset))] # select the requested analyses
+        
+        selected_methods <- c()
+        for (i in 1:length(methods)) {
+            selected_methods <- c(selected_methods,grep(methods[i], names(gtexBenchmark_current_outer)))
+        }
+        
+        gtexBenchmark_current_outer <- gtexBenchmark_current_outer[selected_methods] # name ordered
+
+        metaInfo_current_outer <- metaInfo[grepl(selection[j], names(metaInfo))]
+
+        resList <- c() # to store results of each repeat later
+        #nRep=c("rep_1_","rep_2","rep_3","rep_4","rep_5","rep_6","rep_7","rep_8","rep_9","rep_10") # i.e. we repeated the 5v5 edgeR filter analysis three times
+        nRep=c("rep_1_","rep_2","rep_3")
+        # for each of k repeats, do:
+        for (k in 1:length(nRep)) {
+            gtexBenchmark_current_inner <- gtexBenchmark_current_outer[grepl(nRep[k], names(gtexBenchmark_current_outer))] # get analysis data of k-th repeat
+            metaInfo_current_inner <- metaInfo_current_outer[grepl(nRep[k], names(metaInfo_current_outer))] # get truth data of k-th repeat
+
+            pvalues <- get_pvalues(gtexBenchmark_current_inner,methods)
+
+            truth_file <- gtexBenchmark_current_inner[[1]]$dtuAnalysis
+            txSwapped <- metaInfo_current_inner[1] # txSwapped is that of the first repeat but is the same for all (3) repeats
+            truth_file <- truth_file[,c("TXNAME","p_value")]
+    
+            txSwapped[[1]]$metaInfo <- txSwapped[[1]]$metaInfo[match(truth_file$TXNAME,txSwapped[[1]]$metaInfo$TXNAME),]
+    
+            truth_file$gene_modified <- as.numeric(txSwapped[[1]]$metaInfo$txSwapped)
+            truth_file <- truth_file[order(truth_file$TXNAME),]
+            rownames(truth_file) <- truth_file$TXNAME
+
+            resList[[k]] <- list(pvalues,truth_file)
+        }
+        
+        # concatenate the results of the repeated analyses into one dataframe in order to calculate average performances over repeats (required for iCobra). Avoid repeated rownames. 
+        rownames(resList[[1]][[1]]) <- paste0(rownames(resList[[1]][[1]]), "_1")
+        rownames(resList[[2]][[1]]) <- paste0(rownames(resList[[2]][[1]]), "_2")
+        rownames(resList[[3]][[1]]) <- paste0(rownames(resList[[3]][[1]]), "_3")
+
+        pvalues_full <- rbind(resList[[1]][[1]],resList[[2]][[1]],resList[[3]][[1]])
+        
+        # concatenate the metadata of the repeated analyses into one dataframe in order to calculate average performances over repeats (required for iCobra). Avoid repeated rownames. 
+        rownames(resList[[1]][[2]]) <- paste0(rownames(resList[[1]][[2]]), "_1")
+        rownames(resList[[2]][[2]]) <- paste0(rownames(resList[[2]][[2]]), "_2")
+        rownames(resList[[3]][[2]]) <- paste0(rownames(resList[[3]][[2]]), "_3")
+
+        truth_file_full <- rbind(resList[[1]][[2]],resList[[2]][[2]],resList[[3]][[2]])
+        
+        # generate plot with iCobra
+        cobra <- COBRAData(pval = pvalues_full, truth = truth_file_full)
+        cobra <- calculate_adjp(cobra)
+        cobra1perf <- calculate_performance(cobra, binary_truth = "gene_modified", cont_truth = "none", splv = "none", aspects = c("fdrtpr", "fdrtprcurve", "overlap"))
+        cobraplot <- prepare_data_for_plot(cobra1perf, colorscheme = "Dark2", facetted = TRUE)
+        
+        # customize colors
+        new_col <- colors[which(names(colors)%in%methods)]
+        new_col <- c(rep(c(new_col, "#999999"),4),rep("white",2*(length(methods)+1)))
+        names(new_col) <- names(cobraplot@plotcolors)
+        cobraplot@plotcolors <- new_col
+        # 
+        # # create plot
+        plot <- plot_fdrtprcurve(cobraplot, xaxisrange = c(0, 0.4), yaxisrange = c(0,1))
+        # # customize plot
+        plot <- plot +
+            ggtitle(titles[j]) +
+            theme(strip.background = element_blank(),
+            strip.text.x = element_blank(),
+            plot.title = element_text(size=10),
+            axis.text.x = element_text(size = 10),
+            axis.text.y = element_text(size = 10),
+            axis.title.x = element_text(size = 10),
+            axis.title.y = element_text(size = 10))
+        
+        # save plot
+        png(paste0(wd,"/Results/Gtex_benchmark/FDRTPR_count_", gsub(" ", "_", titles[j]), ".png"),
+        width     = 5.5,
+        height    = 4.5,
+        units     = "in",
+        res       = 200,
+        pointsize = 4) # start export
+        print(plot)
+        dev.off()
+  }
+}
+```
+
+
+```{r}
+selection <- c("5_rep_.(_|0_)filterLenient","20_rep_.(_|0_)filterLenient","5_rep_.(_|0_)filterStringent","20_rep_.(_|0_)filterStringent")
+
+colors<- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "black")
+names(colors) <- c("DEXSeq","DoubleExpSeq","DRIMSeq","edgeR_diffsplice", "limma_diffsplice" ,"NBSplice","quasiBinomial")
+
+methods <- c("DEXSeq","DoubleExpSeq","DRIMSeq","edgeR_diffsplice", "limma_diffsplice" ,"NBSplice","quasiBinomial")
+
+titles <- c("5 versus 5 - edgeR filter - count","20 versus 20 - edgeR filter - count","5 versus 5 - DRIMSeq filter - count","20 versus 20 - DRIMSeq filter - count")
+
+visualize_datasets(dataset=gtexBenchmark,
+                   metaInfo=metaInfo,
+                   nFilters=2,
+                   nSampleSizes=2,
+                   methods=methods,
+                   colors=colors,
+                   titles=titles,
+                   selection=selection)
+```
+
+```{r}
+selection <- c("50_rep_.(_|0_)filterLenient","50_rep_.(_|0_)filterStringent")
+
+colors<- c("#56B4E9", "#F0E442", "#0072B2", "black")
+names(colors) <- c("DoubleExpSeq","edgeR_diffsplice", "limma_diffsplice","quasiBinomial")
+
+methods <- c("DoubleExpSeq","edgeR_diffsplice", "limma_diffsplice","quasiBinomial")
+
+titles <- c("50 versus 50 - edgeR filter - count","50 versus 50 - DRIMSeq filter - count")
+
+visualize_datasets(dataset=gtexBenchmark,
+                   metaInfo=metaInfo,
+                   nFilters=2,
+                   nSampleSizes=1,
+                   methods=methods,
+                   colors=colors,
+                   titles=titles,
+                   selection=selection)
+```
+
+
+
+
