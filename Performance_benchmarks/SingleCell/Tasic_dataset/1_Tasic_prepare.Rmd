@@ -20,6 +20,7 @@ metaData <- openxlsx::read.xlsx("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPap
 
 access <- read.csv2("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Tasic_data/GSE115746_accession_table.csv",sep = "\t")
 
+##  make sure this is unnecessary!!!
 dir <- "/Volumes/ExternalDrive/DTU_project/Data/Tasic/salmon_Tasic_1"
 samples <- read.table(file.path(dir, "SRR_select.txt"), header = FALSE)
 files <- file.path(dir, samples$V1, "quant.sf")

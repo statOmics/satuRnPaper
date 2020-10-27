@@ -20,7 +20,7 @@ The raw data files for the Gtex benchmark were downloaded from:
 #https://storage.googleapis.com/gtex_analysis_v8/rna_seq_data/GTEx_Analysis_2017-06-05_v8_RSEMv1.3.0_transcript_expected_count.gct.gz
 ```
 
-**In order to run this specific script (1_Gtex_perpare.Rmd), these files should be downloaded from Zenodo and copied into the raw_data folder from this Github page**, which is located in the directory /satuRn_paper/Data. However, not that the other scripts (2_Gtex_DTU.Rmd and 3_Gtex_visualize.Rmd) can be run with intermediate data files that are already present on this GitHub page.
+**In order to run this specific script (1_Gtex_perpare.Rmd), these files should be downloaded from Zenodo and copied into the Data folder from this Github page**. Note the files we provide are identical to the once from the links above; we have only renamed the files.
 
 # Load Gtex data
 
@@ -34,8 +34,11 @@ wd <- here()
 # Optional: change the working directory
 setwd(wd)
 
-gtexCm <- fread(paste0(wd, "/Data/raw_data/GTEx_Analysis_2017-06-05_v8_RSEMv1.3.0_transcript_expected_count.gct"), data.table = FALSE)
-gtexSample <- fread(paste0(wd, "/Data/raw_data/GTEx_Analysis_v8_Annotations_SampleAttributesDS.txt"), data.table = FALSE)
+gtexCm <- fread("/Users/jg/Desktop/paper_Data/Gtex_workingData/01_GTEx_baseline_dataset_count.gz", data.table = FALSE)
+gtexSample <- fread("/Users/jg/Desktop/paper_Data/Gtex_workingData/01_GTEx_baseline_metadata.txt", data.table = FALSE)
+
+gtexCm <- fread(paste0(wd, "/Data/Gtex_workingData/01_GTEx_baseline_dataset_count.gz"), data.table = FALSE)
+gtexSample <- fread(paste0(wd, "/Data/Gtex_workingData/GTEx_Analysis_v8_Annotations_SampleAttributesDS.txt"), data.table = FALSE)
 ```
 
 # Subset Gtex data
@@ -49,7 +52,7 @@ In order  to obtain a mock dataset, however, we need to construct a dataset wher
 - Only samples from center B1
 - Only RNASEQ samples in GTEx Analysis Freeze (SMAFRZE)
 
-In aaddition, in the code below we also set benchmark hyperparameters (i.e. sample size, number of repeats)
+In addition, in the code below we also set benchmark hyperparameters (i.e. sample size, number of repeats)
 
 ```{r}
 # Extract gene info
@@ -123,7 +126,9 @@ length(nrRepList) == length(samplesPrCondition) * nrRepsMade
 table(sapply(nrRepList, length))
 ```
 
-# Generate leniently filtered Gtex benchmark datasets
+I could write a funcction, "generate_Lenient_Benchmark_Datasets", that takes as input nreplist (a list), gtexCM (a matrix?) and txinfo (a dataframe wit possible extra specifications i.e. colnames?)
+
+# Generate leniently (edgeR) filtered Gtex benchmark datasets
 
 ```{r}
 gtexBenchmarkDataLenient <- lapply(c(1:length(nrRepList)), function(x) {
@@ -229,7 +234,7 @@ gtexBenchmarkDataLenient <- lapply(c(1:length(nrRepList)), function(x) {
 names(gtexBenchmarkDataLenient) <- paste0(names(nrRepList),"_filterLenient")
 ```
 
-# Generate stringently filtered Gtex benchmark datasets
+# Generate stringently (DRIMSeq) filtered Gtex benchmark datasets
 
 ```{r}
 gtexBenchmarkDataStringent <- lapply(c(1:length(nrRepList)), function(x) {
@@ -350,7 +355,7 @@ names(gtexBenchmarkDataStringent) <- paste0(names(nrRepList),"_filterStringent")
 This file is already present at /satuRn_paper/Data/working_data/Gtex_data
 
 ```{r}
-save(gtexBenchmarkDataLenient, gtexBenchmarkDataStringent, file=paste0(wd,'/Data/working_data/Gtex_data/01_gtex_benchmark_data_count.Rdata'))
+save(gtexBenchmarkDataLenient, gtexBenchmarkDataStringent, file=paste0(wd,'/Data/Gtex_workingData/02_GTEx_benchmark_datasets_count.Rdata'))
 ```
 
 
