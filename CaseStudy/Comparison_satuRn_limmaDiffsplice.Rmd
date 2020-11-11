@@ -1,33 +1,42 @@
 ---
 title: "Comparison_satuRn_limmaDiffsplice"
+author: "Jeroen Gilis"
+date: "11/11/2020"
 output: html_document
 ---
 
-Load libraries
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+# Load libraries
 
 ```{r, message=FALSE, warning=FALSE}
 library(SummarizedExperiment)
-library(qbDTU)
+library(satuRn)
 library(ggplot2)
 library(tidyverse)
 ```
 
-Load data
+# Load data
+
+These are the results of the analyses of the Tasic case study with satuRn (generated in satuRn_analysis.Rmd), limma diffsplice (generated in limmaDiffsplice_analysis.Rmd) and with edgeR (gene-level analysis, generated in edgeR_DGE_analysis.Rmd).
 
 ```{r}
-sumExp <- readRDS(file="/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Case_study_L5It/sumExp.Rds")
-limmaRes_all <- readRDS(file="/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Case_study_L5It/limmaRes_all.Rds")
-load("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Case_study_L5It/topTreat_DGE.Rda")
+satuRn_results <- readRDS(file="./Data/Tasic_caseStudy_satuRn.Rds")
+limmaRes_results <- readRDS(file="./Data/Tasic_caseStudy_limmaDiffsplice.Rds")
+edgeR_results <- readRDS(file="./Data/Tasic_caseStudy_edgeR.Rds")
 ```
 
 Get ranks (in terms of significance) for each transcript in both mehtods
 
 ```{r}
-txInfo <- as.data.frame(rowData(sumExp)[,c(1,2)])
-txInfo$rank_limma <- match(txInfo$isoform_id,rownames(limmaRes_all[[6]]))
-txInfo$rank_qbDTU <- match(txInfo$isoform_id,rownames(rowData(sumExp)[["fitQBResult_C6"]])[order(rowData(sumExp)[["fitQBResult_C6"]]$empirical_pval)])
+txInfo <- as.data.frame(rowData(satuRn_results)[,c(1,2)])
+txInfo$rank_limma <- match(txInfo$isoform_id,rownames(limmaRes_results[[6]]))
+txInfo$rank_satuRn <- match(txInfo$isoform_id,rownames(rowData(satuRn_results)[["fitQBResult_C6"]])[order(rowData(satuRn_results)[["fitQBResult_C6"]]$empirical_pval)])
 
-txInfo$diffRank <- abs(txInfo$rank_limma - txInfo$rank_qbDTU) # difference in ranks between both methods
+txInfo$diffRank <- abs(txInfo$rank_limma - txInfo$rank_satuRn) # difference in ranks between both methods
 ```
 
 # limmaDiffsplice more often identifies transcripts of genes with low information content
@@ -39,55 +48,56 @@ When we inspected the transcripts that were highly ranked in the top DTU list of
 Get gene-level counts
 
 ```{r}
-quant_sf_current <- assay(sumExp)[,sumExp$group %in% c("VISp.L5_IT_VISp_Hsd11b1_Endou", "ALM.L5_IT_ALM_Tnc")] # get only cells from contrast 6
+Tasic_counts_current <- assay(satuRn_results)[,satuRn_results$group %in% c("VISp.L5_IT_VISp_Hsd11b1_Endou", "ALM.L5_IT_ALM_Tnc")] # get only cells from contrast 6
 
-totalCount <- qbDTU:::getTotalCount(quant_sf_current, txInfo)
+totalCount <- satuRn:::getTotalCount(Tasic_counts_current, txInfo)
 mean_tot <- rowMeans(totalCount) # summarize gene-level counts as the mean over all cells
 ```
 
 Get fraction of zeros
 
 ```{r}
-frac_zero <- rowSums(quant_sf_current == 0)/ncol(quant_sf_current)
+frac_zero <- rowSums(Tasic_counts_current == 0)/ncol(Tasic_counts_current)
+head(frac_zero)
 ```
-
 
 Identify DTU transcripts in both methods
 
 ```{r}
-qbDTU_DTU <- rowData(sumExp)[["fitQBResult_C6"]]$empirical_FDR # DTU in qbDTU
-names(qbDTU_DTU) <- rownames(rowData(sumExp)[["fitQBResult_C6"]])
+satuRn_DTU <- rowData(satuRn_results)[["fitQBResult_C6"]]$empirical_FDR # DTU in satuRn
+names(satuRn_DTU) <- rownames(rowData(satuRn_results)[["fitQBResult_C6"]])
 
-limma_DTU <- limmaRes_all[[6]]$empirical_FDR # DTU in limma
-names(limma_DTU) <- rownames(limmaRes_all[[6]])
-limma_DTU <- limma_DTU[match(names(qbDTU_DTU),names(limma_DTU))]
+limma_DTU <- limmaRes_results[[6]]$empirical_FDR # DTU in limma
+names(limma_DTU) <- rownames(limmaRes_results[[6]])
+limma_DTU <- limma_DTU[match(names(satuRn_DTU),names(limma_DTU))]
 
-both <- qbDTU_DTU<0.05 & limma_DTU<0.05 # DTU in both
-qbDTU <- qbDTU_DTU<0.05 & !limma_DTU<0.05 # DTU in qbDTU only
-limma <- limma_DTU<0.05 & !qbDTU_DTU<0.05 # DTU in limma only
+both <- satuRn_DTU<0.05 & limma_DTU<0.05 # DTU in both
+satuRn <- satuRn_DTU<0.05 & !limma_DTU<0.05 # DTU in satuRn only
+limma <- limma_DTU<0.05 & !satuRn_DTU<0.05 # DTU in limma only
 ```
 
-get data in correct format for ggplot
+Get data in correct format for ggplot
 
 ```{R}
 DTU_all <- limma
 DTU_all[which(DTU_all==TRUE)] <- "limmaDiffsplice"
-DTU_all[which(qbDTU==TRUE)] <- "satuRn"
+DTU_all[which(satuRn==TRUE)] <- "satuRn"
 DTU_all[which(both==TRUE)] <- "both"
 DTU_all[which(DTU_all==FALSE)] <- "none"
 gg_data <- as.data.frame(cbind(names(DTU_all),unname(DTU_all),mean_tot,frac_zero))
 colnames(gg_data) <- c("transcript","method","totalCount","frac_zero")
 gg_data$method <- as.factor(gg_data$method)
-gg_data$totalCount <- as.numeric(gg_data$totalCount)
-gg_data$frac_zero <- as.numeric(gg_data$frac_zero)
+gg_data$totalCount <- as.numeric(as.character(gg_data$totalCount))
+gg_data$frac_zero <- as.numeric(as.character(gg_data$frac_zero))
 
 gg_data$method <- factor(gg_data$method, levels = c("satuRn","both","limmaDiffsplice","none"))
 ```
 
+
 Make plot of gene-level count of the transcripts uniquely identified as DTU by satuRn or limma diffsplice, or by both methods.
 
 ```{r}
-png("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Results/CaseStudy/totalCount.png",
+png("./Results/caseStudy/Figure8A.png",
   width     = 4.5,
   height    = 3.5,
   units     = "in",
@@ -106,16 +116,15 @@ dev.off()
 
 Make plot of the fraction of non-zero counts in the transcripts uniquely identified as DTU by satuRn or limma diffsplice, or by both methods.
 
-```{R}
+```{r}
 gg_data$frac_non_zero <- 1-gg_data$frac_zero
 
-png("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Results/CaseStudy/frac_nonZero.png",
+png("./Results/caseStudy/Figure8B.png",
   width     = 4.5,
   height    = 3.5,
   units     = "in",
   res       = 400,
   pointsize = 4)
-
 ggplot(data = gg_data[-which(gg_data$method == "none"),], aes(x=method,y=frac_non_zero,fill=method)) +
   geom_violin() +
   geom_jitter(aes(colour=method),width = 0.1) +
@@ -127,29 +136,26 @@ ggplot(data = gg_data[-which(gg_data$method == "none"),], aes(x=method,y=frac_no
   stat_summary(fun=median, geom="point", shape=18, size=5, col="darkgreen") +
   ylab("fraction_non_zero")  +
   theme(plot.title = element_text(size = 10))
-
 dev.off()
 ```
 
-
-
 ## Examples
 
-As a consequence, transcripts belonging to lowly expressed genes are correctly considered less informative in satuRn and are thus less likely to be picked up. In Figure 7A, we show that while our method estimates a mean usage of 7% in Tnc cells and 26% in Hsd11b1 Endou cells (indicated by the gold diamond), the transcript is not identified as differentially used, given the low abundance of the corresponding gene and the highly dispersed single-cell level observations.
+As a consequence, transcripts belonging to lowly expressed genes are correctly considered less informative in satuRn and are thus less likely to be picked up. In Figure 9A, we show that while our method estimates a mean usage of 7% in Tnc cells and 26% in Hsd11b1 Endou cells (indicated by the gold diamond), the transcript is not identified as differentially used, given the low abundance of the corresponding gene and the highly dispersed single-cell level observations.
 
 ```{r}
-group1 <- rownames(colData(sumExp))[colData(sumExp)$group == "ALM.L5_IT_ALM_Tnc"]
-group2 <- rownames(colData(sumExp))[colData(sumExp)$group == "VISp.L5_IT_VISp_Hsd11b1_Endou"]
+group1 <- rownames(colData(satuRn_results))[colData(satuRn_results)$group == "ALM.L5_IT_ALM_Tnc"]
+group2 <- rownames(colData(satuRn_results))[colData(satuRn_results)$group == "VISp.L5_IT_VISp_Hsd11b1_Endou"]
 
-plot_7A <- qbDTU::plotDTU(object = sumExp, contrast = "C6", groups = list(group1,group2), coefficients = list(c(0,0,0,0,0,0,0,0,1,0,0,0,0,0),c(0,0,0,0,0,0,0,0,0,0,0,0,1,0)), summaryStat = c("model","mean"), transcripts = "ENSMUST00000080335",genes = NULL,top.n = 6)
+plot_9A <- satuRn::plotDTU(object = satuRn_results, contrast = "C6", groups = list(group1,group2), coefficients = list(c(0,0,0,0,0,0,0,0,1,0,0,0,0,0),c(0,0,0,0,0,0,0,0,0,0,0,0,1,0)), summaryStat = c("model","mean"), transcripts = "ENSMUST00000080335",genes = NULL,top.n = 6)
 
 # get same layout for figure as in paper
 transcript <- "ENSMUST00000080335"
-padj_limma <- format(limmaRes_all[[6]][transcript,"empirical_FDR"],digits=4)
+padj_limma <- format(limmaRes_results[[6]][transcript,"empirical_FDR"],digits=4)
 rank_limma <- txInfo[txInfo$isoform_id == transcript,"rank_limma"]
 
-padj_satuRn <- format(rowData(sumExp)[["fitQBResult_C6"]][transcript,"empirical_FDR"],digits=4)
-rank_satuRn <- txInfo[txInfo$isoform_id == transcript,"rank_qbDTU"]
+padj_satuRn <- format(rowData(satuRn_results)[["fitQBResult_C6"]][transcript,"empirical_FDR"],digits=4)
+rank_satuRn <- txInfo[txInfo$isoform_id == transcript,"rank_satuRn"]
 
 label_facet <- function(txID, padj_limma, rank_limma, padj_satuRn, rank_satuRn) 
 {
@@ -159,24 +165,21 @@ label_facet <- function(txID, padj_limma, rank_limma, padj_satuRn, rank_satuRn)
     return(lab)
 }
 
-# plot figure 7A
-
-# png("CaseStudy_results/figure7A.png",
-#   width     = 5,
-#   height    = 5,
-#   units     = "in",
-#   res       = 200,
-#   pointsize = 4)
-
-
-plot_7A[[1]] +
+# plot figure 9A
+png("./Results/caseStudy/Figure9A.png",
+  width     = 5,
+  height    = 5,
+  units     = "in",
+  res       = 200,
+  pointsize = 4)
+plot_9A[[1]] +
   scale_fill_manual(labels = c("ALM","VISp"), values=c("royalblue4", "firebrick")) +
   scale_x_discrete(labels= c("Tnc","Hsd11b1_Endou")) + 
   facet_wrap(~variable, ncol = 1, labeller = labeller(variable = label_facet(factor(transcript), padj_limma, rank_limma, padj_satuRn, rank_satuRn))) + 
               theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size = 8)) + 
               theme(strip.text = element_text(size = 7,face = "bold"))
 
-# dev.off()
+dev.off()
 ```
 
 # satuRN more often identifies small changes in transcript usage that are stable across all cells
@@ -185,36 +188,34 @@ Conversely, by looking at the transcripts that were highly ranked in our DTU lis
 
 ## Example
 
-An example of such a transcript is shown in Figure 7B.
+An example of such a transcript is shown in Figure 9B.
 
 ```{r}
-plot_7B <- qbDTU::plotDTU(object = sumExp, contrast = "C6", groups = list(group1,group2), coefficients = list(c(0,0,0,0,0,0,0,0,1,0,0,0,0,0),c(0,0,0,0,0,0,0,0,0,0,0,0,1,0)), summaryStat = "model", transcripts = "ENSMUST00000125287",genes = NULL,top.n = 6)
+plot_9B <- satuRn::plotDTU(object = satuRn_results, contrast = "C6", groups = list(group1,group2), coefficients = list(c(0,0,0,0,0,0,0,0,1,0,0,0,0,0),c(0,0,0,0,0,0,0,0,0,0,0,0,1,0)), summaryStat = "model", transcripts = "ENSMUST00000125287",genes = NULL,top.n = 6)
 
 # get same layout for figure as in paper
 transcript <- "ENSMUST00000125287"
-padj_limma <- format(limmaRes_all[[6]][transcript,"empirical_FDR"],digits=4)
+padj_limma <- format(limmaRes_results[[6]][transcript,"empirical_FDR"],digits=4)
 rank_limma <- txInfo[txInfo$isoform_id == transcript,"rank_limma"]
 
-padj_satuRn <- format(rowData(sumExp)[["fitQBResult_C6"]][transcript,"empirical_FDR"],digits=4)
-rank_satuRn <- txInfo[txInfo$isoform_id == transcript,"rank_qbDTU"]
+padj_satuRn <- format(rowData(satuRn_results)[["fitQBResult_C6"]][transcript,"empirical_FDR"],digits=4)
+rank_satuRn <- txInfo[txInfo$isoform_id == transcript,"rank_satuRn"]
 
-# plot figure 7B
-
-# png("CaseStudy_results/figure7B.png",
-#   width     = 5,
-#   height    = 5,
-#   units     = "in",
-#   res       = 200,
-#   pointsize = 4)
-
-plot_7B[[1]] +
+# plot figure 9B
+png("./Results/caseStudy/Figure9B.png",
+  width     = 5,
+  height    = 5,
+  units     = "in",
+  res       = 200,
+  pointsize = 4)
+plot_9B[[1]] +
   scale_fill_manual(labels = c("ALM","VISp"), values=c("royalblue4", "firebrick")) +
   scale_x_discrete(labels= c("Tnc","Hsd11b1_Endou")) + 
   facet_wrap(~variable, ncol = 1, labeller = labeller(variable = label_facet(factor(transcript), padj_limma, rank_limma, padj_satuRn, rank_satuRn))) + 
               theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size = 8)) + 
               theme(strip.text = element_text(size = 7,face = "bold"))
 
-# dev.off()
+dev.off()
 ```
 
 # limmaDiffsplice is more influenced by outlying observations that have a low gene-level abundance
@@ -223,45 +224,34 @@ DTU claims by limma are driven by differences in raw mean usages of transcripts.
 
 ## Example
 
-In Figure 7C, the raw mean usage of the transcript is 77% in Tnc cells and 45% in Hsd11b1 Endou cells, as indicated by the cyan diamonds. By contrast, the mean usage estimate by [name], which takes into account that the Hsd11b1 Endou cells expressing the transcript at 0% usage have low gene-level count, is 83% for Tnc cells and 75% for Hsd11b1 Endou cells, as indicated by the gold diamonds.
+In Figure 9C, the raw mean usage of the transcript is 77% in Tnc cells and 45% in Hsd11b1 Endou cells, as indicated by the cyan diamonds. By contrast, the mean usage estimate by satuRn, which takes into account that the Hsd11b1 Endou cells expressing the transcript at 0% usage have low gene-level count, is 83% for Tnc cells and 75% for Hsd11b1 Endou cells, as indicated by the gold diamonds.
 
 ```{r}
-plot_7C <- qbDTU::plotDTU(object = sumExp, contrast = "C6", groups = list(group1,group2), coefficients = list(c(0,0,0,0,0,0,0,0,1,0,0,0,0,0),c(0,0,0,0,0,0,0,0,0,0,0,0,1,0)), summaryStat = c("model","mean"), transcripts = "ENSMUST00000106956",genes = NULL,top.n = 6)
+plot_9C <- satuRn::plotDTU(object = satuRn_results, contrast = "C6", groups = list(group1,group2), coefficients = list(c(0,0,0,0,0,0,0,0,1,0,0,0,0,0),c(0,0,0,0,0,0,0,0,0,0,0,0,1,0)), summaryStat = c("model","mean"), transcripts = "ENSMUST00000106956",genes = NULL,top.n = 6)
 
 # get same layout for figure as in paper
 transcript <- "ENSMUST00000106956"
-padj_limma <- format(limmaRes_all[[6]][transcript,"empirical_FDR"],digits=4)
+padj_limma <- format(limmaRes_results[[6]][transcript,"empirical_FDR"],digits=4)
 rank_limma <- txInfo[txInfo$isoform_id == transcript,"rank_limma"]
 
-padj_satuRn <- format(rowData(sumExp)[["fitQBResult_C6"]][transcript,"empirical_FDR"],digits=4)
-rank_satuRn <- txInfo[txInfo$isoform_id == transcript,"rank_qbDTU"]
+padj_satuRn <- format(rowData(satuRn_results)[["fitQBResult_C6"]][transcript,"empirical_FDR"],digits=4)
+rank_satuRn <- txInfo[txInfo$isoform_id == transcript,"rank_satuRn"]
 
-# plot figure 7C
-
-# png("CaseStudy_results/figure7C.png",
-#   width     = 5,
-#   height    = 5,
-#   units     = "in",
-#   res       = 200,
-#   pointsize = 4)
-
-plot_7C[[1]] +
+# plot figure 9C
+png("./Results/caseStudy/Figure9C.png",
+  width     = 5,
+  height    = 5,
+  units     = "in",
+  res       = 200,
+  pointsize = 4)
+plot_9C[[1]] +
   scale_fill_manual(labels = c("ALM","VISp"), values=c("royalblue4", "firebrick")) +
   scale_x_discrete(labels= c("Tnc","Hsd11b1_Endou")) + 
   facet_wrap(~variable, ncol = 1, labeller = labeller(variable = label_facet(factor(transcript), padj_limma, rank_limma, padj_satuRn, rank_satuRn))) + 
               theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size = 8)) + 
               theme(strip.text = element_text(size = 7,face = "bold"))
-
-# dev.off()
+dev.off()
 ```
-
-
-
-
-
-
-
-
 
 
 

@@ -1,283 +1,40 @@
 ---
-title: "Tasic_DTU"
+title: "2_Tasic_DTU"
+author: "Jeroen Gilis"
+date: "05/11/2020"
 output: html_document
 ---
 
-```{r}
-library(devtools)
-devtools::install_local("/Users/jg/Desktop/PhD/DTU_project/qbDTU", force = TRUE, quiet = FALSE)
-library(qbDTU)
+**In order to run this script (2_Tasic_DTU.Rmd), the dataset 02_Tasic_benchmark_datasets_count.Rdata is required.** This file can either be generated with the 1_Tasic_prepare.Rmd script or downloaded from Zenodo.
+
+Here we run the DTU analyses for all 6 methods on all (18) Tasic benchmark datasets. Note that for DEXSeq and DRIMSeq we only run the datasets with 20 cells in each group, as these methods do not scale to large datasets. NBSplice was omitted as it does not converge on datasets with many zeroes. This code runs approximately 3 hours on a MacBook Pro 2018, processor; 2,3 GHz Quad-Core Intel Core i5, 16GB RAM. Most of this runtime was attributed to the DEXSeq and DRIMSeq analyses.
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 ```
 
-Load all 8 DTU methods (omit NBSplice, cannot be used for single cell data)
+# Load DTU methods
 
-```{r, message=FALSE}
-### Libraries
+Source file that allows running all seven DTU methods that were assessed in this paper: satuRn, DoubleExpSeq, limma diffsplice, edgeRdiffsplice, DEXSeq, DRIMseq and NBSplice.
+
+```{r, message=FALSE, warning=FALSE}
+### load libraries
 library(edgeR)
 library(limma)
 library(DEXSeq)
 library(DRIMSeq)
 library(DoubleExpSeq)
-library(qbDTU)
+library(NBSplice)
+library(satuRn)
+library(doMC)
 
-### Functions for running each method
-if(TRUE) {
-  
-  qbDTU_DTU <- function(countData, tx2gene, sampleData, quiet = FALSE){
-        
-        colnames(tx2gene)[1:2] <- c("isoform_id", "gene_id")
-        group <- factor(sampleData$condition)
-        design = model.matrix(~0+group)
-        
-        sumExp <- SummarizedExperiment::SummarizedExperiment(assays=list(counts=countData), colData = sampleData, rowData = tx2gene)
-
-        metadata(sumExp)$formula <- ~0+group
-        
-        sumExp <- qbDTU::fitQB.method(sumExp,
-                       speed = FALSE,
-                       parallel = TRUE,
-                       BPPARAM = BiocParallel::bpparam(),
-                       verbose = TRUE
-                      )
-        
-        L <- matrix(0, ncol = 1, nrow = 2)
-        rownames(L) <- colnames(design)
-        colnames(L) <- c("AvsB")
-        L[1:2,] <- c(-1,1)
-        
-        sumExp <- qbDTU::topTable(object = sumExp, contrasts = L, plot=F)
-        
-        output <- data.frame(rownames(countData))
-        rownames(output) <- rownames(countData)
-        colnames(output) <- "TXNAME"
-        
-        output$GENEID <- tx2gene[match(output$TXNAME,tx2gene$TXNAME),"GENEID"]
-        
-        result <- rowData(sumExp)[["fitQBResult_AvsB"]]
-        
-        output$tvalue <- result$t
-        output$p_value_raw <- result$pval
-        output$FDR_raw <- result$regular_FDR
-        output$p_value <- result$empirical_pval
-        output$FDR <- result$empirical_FDR
-
-        localRes <- output
-        
-        return(localRes)
-    }
-
-    ### Limma
-    limma_diffsplice_DTU <- function(countData, tx2gene, sampleData) {
-        # Make design
-        design = model.matrix(~condition, data=sampleData)
-
-
-        geneForEachTx <- tx2gene$GENEID[match(rownames(countData),tx2gene$TXNAME)]
-        y <- DGEList(counts = countData, group=as.data.frame(sampleData)$condition, genes = geneForEachTx)
-
-        y <- calcNormFactors(y)
-
-        v <- voom(y, design, plot=FALSE)
-        fit <- lmFit(v, design)
-
-        ex <- limma::diffSplice(fit, geneid = "genes")
-
-        limmaRes <- topSplice(ex, coef=2, test="t", number = Inf)
-
-        ### Massage result
-        localRes <- limmaRes
-        localRes$TXNAME <- rownames(localRes)
-        rownames(localRes) <- NULL
-
-        colnames(localRes)[which(colnames(localRes) == 'genes')] <- 'GENEID'
-
-        localRes <- localRes[,c(
-            which( colnames(localRes) == 'TXNAME'),
-            which( colnames(localRes) == 'GENEID'),
-            which( ! colnames(localRes) %in% c('TXNAME','GENEID'))
-        )]
-
-        colnames(localRes)[which(colnames(localRes) == 'P.Value')] <- 'p_value'
-
-        return(localRes)
-    }
-
-    ### DEXSeq
-    DEXSeq_DTU <- function(countData, tx2gene, sampleData) {
-        # get tx2gene in better format
-        geneForEachTx <- tx2gene$GENEID[match(rownames(countData),tx2gene$TXNAME)]
-
-        countData <- round(countData)
-
-        dxd <- DEXSeqDataSet(countData = countData,
-                             sampleData = sampleData,
-                             design = ~ sample + exon + condition:exon,
-                             featureID = rownames(countData),
-                             groupID = as.character(geneForEachTx))
-
-        dxd <- estimateSizeFactors(dxd)
-        ## note that estimating dispersions takes some time!
-        print("estimating the dispersions")
-        dxd <- estimateDispersions(dxd)
-
-        print("testing for DEU")
-        dxd <- testForDEU(dxd, reducedModel=~ sample + exon)
-
-        print("Getting the results")
-        dxr <- DEXSeqResults(dxd)
-
-        ### Massage result
-        localRes <- as.data.frame(dxr)
-        localRes <- localRes[,c('featureID','groupID','exonBaseMean','dispersion','stat','pvalue','padj')]
-        colnames(localRes)[1:2] <- c('TXNAME','GENEID')
-        rownames(localRes) <- NULL
-
-        colnames(localRes)[which(colnames(localRes) == 'pvalue')] <- 'p_value'
-        colnames(localRes)[which(colnames(localRes) == 'padj')] <- 'FDR'
-
-        return(localRes)
-    }
-    
-    ### DRIMSeq
-    DRIMSeq_DTU <- function(countData, tx2gene, sampleData) {
-        print("next")
-        message("next")
-        ## To make DRIMSeq analysis reproducible
-        set.seed(123)
-      
-        # get tx2gene in better format
-        countData <- round(countData)
-        countData <- as.data.frame(countData)
-
-        geneForEachTx <- tx2gene$GENEID[match(rownames(countData),tx2gene$TXNAME)]
-
-        countData$gene_id <- geneForEachTx
-        countData$feature_id <- row.names(countData)
-        rownames(countData) <- c()
-
-        d <- dmDSdata(counts = countData, samples = sampleData)
-
-        design <- model.matrix(~ condition, data = DRIMSeq::samples(d))
-
-        print("dmPrecision")
-        d <- dmPrecision(d, design = design)
-
-        print("dmFit")
-        d <- dmFit(d, design = design, verbose = 1)
-
-        print("dmTest")
-        d <- dmTest(d, coef = 2, verbose = 1)
-
-        ### Massage result
-        localRes <- DRIMSeq::results(d, level = "feature")[, c(
-            'feature_id',
-            'gene_id',
-            'lr',
-            'df',
-            'pvalue',
-            'adj_pvalue'
-        )]
-        colnames(localRes)[1:2] <- c('TXNAME','GENEID')
-
-        colnames(localRes)[which(colnames(localRes) == 'pvalue')] <- 'p_value'
-        colnames(localRes)[which(colnames(localRes) == 'adj_pvalue')] <- 'FDR'
-
-        return(localRes)
-    }
-    
-    ## edgeR_diffsplice
-    edgeR_diffsplice_DTU <- function(countData, tx2gene, sampleData) {
-      
-        y <- DGEList(counts = countData, group=as.data.frame(sampleData)$condition)
-        y <- calcNormFactors(y)
-      
-        design <- model.matrix(~condition, data=sampleData)
-      
-        y <- estimateDisp(y, design = design)
-        fit <- glmFit(y, design = design) ## glmQLfit --> very poor results
-        
-        tx2gene <- tx2gene[match(rownames(fit$counts), tx2gene$TXNAME),]
-      
-        dtuEdgeR <- edgeR::diffSpliceDGE(
-            glmfit = fit,
-            exonid = tx2gene$TXNAME,
-            geneid = tx2gene$GENEID,
-            coef = "conditionb",
-            verbose = FALSE
-        )
-      
-        localRes <- topSpliceDGE(
-            dtuEdgeR,
-            test = 'exon',
-            number = Inf
-        )
-
-        rownames(localRes) <- NULL
-        colnames(localRes)[which(colnames(localRes) == 'GeneID')] <- 'GENEID'
-        colnames(localRes)[which(colnames(localRes) == 'ExonID')] <- 'TXNAME'
-
-        localRes <- localRes[,c(
-            which( colnames(localRes) == 'TXNAME'),
-            which( colnames(localRes) == 'GENEID'),
-            which( ! colnames(localRes) %in% c('TXNAME','GENEID'))
-        )]
-
-        colnames(localRes)[which(colnames(localRes) == 'P.Value')] <- 'p_value'
-
-        return(localRes)
-    }
-    
-    ## DoubleExpSeq
-    DoubleExpSeq_DTU <- function(countData, tx2gene, sampleData,quiet=FALSE) {
-      
-        # get tx2gene in better format
-        geneForEachTx <- tx2gene$GENEID[match(rownames(countData),tx2gene$TXNAME)]
-        groupID <- as.character(geneForEachTx)
-      
-        ## get the "total" counts
-        stopifnot(class(countData)[1] %in% c("matrix", "data.frame"))
-        countData <- as.matrix(countData)
-        stopifnot(class(groupID) %in% c("character", "factor"))
-        stopifnot(length(groupID) == nrow(countData))
-
-        if( ! quiet) {print("Calculating offsets")}
-        forCycle <- split(1:nrow(countData), as.character(groupID))
-        all <- lapply(forCycle, function(i) {
-            sct <- countData[i, , drop = FALSE]
-            rs <- t(sapply(1:nrow(sct), function(r) colSums(sct[, , drop = FALSE])))
-            rownames(rs) <- rownames(sct)
-            rs
-        })
-        all <- do.call(rbind, all)
-        stopifnot(all(rownames(countData) %in% rownames(all)))
-        all <- all[rownames(countData), ]
-        totalCount <- all
-        
-        condition <- as.factor(sampleData$condition)
-        
-        mDouble <- suppressWarnings(DBGLM1(y = countData,
-                  m = totalCount,
-                  groups = condition))
-        
-        pvalDouble <- mDouble$All[,"pVal"]
-        dispDouble <- mDouble$All[,"Model.Disp"]
-        
-        localRes <- data.frame(rownames(countData))
-        rownames(localRes) <- rownames(countData)
-        colnames(localRes) <- "TXNAME"
-        
-        localRes$GENEID <- tx2gene[match(localRes$TXNAME,tx2gene$TXNAME),"GENEID"]
-        localRes$p_value <- pvalDouble ## here I am only returning p-values, could also look into storing logFCs and FDRs
-        localRes$disp <- dispDouble
-
-        return(localRes)
-    }
-    
-}
+source(file="./Performance_benchmarks/DTU_methods.R")
 ```
 
+# Set up parallel execution
+
 ```{r}
-### Set up parralel execution
 if(TRUE) {
     nrCores <- 2
 
@@ -285,7 +42,6 @@ if(TRUE) {
         doParallel <- TRUE
         doProgress <- 'none'
 
-        library(doMC)
         registerDoMC(cores = nrCores)
     } else {
         doParallel <- FALSE
@@ -294,272 +50,209 @@ if(TRUE) {
 }
 ```
 
-Run the analysis for all 8 methods on all (6) Tasic benchmark datasets
+# Run all analyses 
+
+Run the DTU analyses for all 6 methods on all (18) Chen benchmark datasets. Note that for DEXSeq and DRIMSeq we only run the datasets with 20 cells in each group, as these methods do not scale to large datasets. NBSplice was omitted as it does not converge on datasets with many zeroes.
+This code runs approximately 3 hours on a MacBook Pro 2018, processor; 2,3 GHz Quad-Core Intel Core i5, 16GB RAM. Most of this runtimee was attributed to the DEXSeq and DRIMSeq analyses.
 
 ```{r}
-if(TRUE) {
-    ### Load benchmark data
-    load(file='01_Tasic_benchmark_data_count.Rdata')
-    #load(file='01_Tasic_benchmark_data_scaledTPM.Rdata')
+### Load benchmark data
+load(file="./Data/02_Tasic_benchmark_datasets_count.Rdata")
+#load(file="./Data/02_Tasic_benchmark_datasets_scaledTPM.Rdata")
 
-    ### Combine
-    names(TasicBenchmarkLenient)   <- paste0(names(TasicBenchmarkLenient)  , '_filterLenient')
-    names(TasicBenchmarkStringent) <- paste0(names(TasicBenchmarkStringent), '_filterStringent')
+TasicBenchmarkData <- c(TasicBenchmarkLenient,TasicBenchmarkStringent)
 
-    TasicBenchmarkData <- c(
-        TasicBenchmarkLenient,
-        TasicBenchmarkStringent
-    )
-    length(TasicBenchmarkData)
-    
-    ### Run DTU analysis on benchmark data
-    
-    print("start quasiBinomial")
-    
-    # quasiBinomial
-    tStart <- Sys.time()
-    suppressWarnings(TasicDtuBenchmark_quasiBinomial <- plyr::llply(
-        .data = TasicBenchmarkData,
-        .inform = TRUE,
-        .fun = function(localData) {
-            ### Perform DTU analysis
-            t0 <- Sys.time()
-            localRes <- qbDTU_DTU(
-                countData  = localData$data,
-                tx2gene    = localData$metaInfo,
-                sampleData = localData$design
-            )
-            testTime <- as.numeric( difftime(Sys.time(), t0, units = 'secs') )
-            
-            localRes_qb <- localRes
+### Run DTU analysis on benchmark data
 
-            ### Massage
-            localRes$gene_modified <- localData$metaInfo$gene_modified[match(
-                localRes$TXNAME, localData$metaInfo$TXNAME
-            )]
-            
-            
+print("start satuRn")
 
-            ### Return result
-            return(
-                list(
-                    dtuAnalysis = localRes,
-                    runtime = testTime
-                )
-            )
+tStart <- Sys.time()
+suppressWarnings(TasicDtuBenchmark_satuRn <- plyr::llply(
+    .data = TasicBenchmarkData,
+    .inform = TRUE,
+    .fun = function(localData) {
+        ### Perform DTU analysis
+        localRes <- satuRn_DTU(
+            countData  = localData$data,
+            tx2gene    = localData$metaInfo,
+            sampleData = localData$design
+        )
+
+        ### Massage
+        localRes$gene_modified <- localData$metaInfo$gene_modified[match(
+            localRes$TXNAME, localData$metaInfo$TXNAME)]
+
+        ### Return result
+        return(list(dtuAnalysis = localRes))
+    }
+))
+difftime(Sys.time(), tStart)
+
+print("start limma diffsplice")
+
+tStart <- Sys.time()
+TasicDtuBenchmark_limmaDiffsplice <- plyr::llply(
+    .data = TasicBenchmarkData,
+    .parallel = doParallel,
+    .progress = doProgress,
+    .inform = TRUE,
+    .fun = function(localData) {
+        ### Perform DTU analysis
+        localRes <- limma_diffsplice_DTU(
+            countData  = localData$data,
+            tx2gene    = localData$metaInfo,
+            sampleData = localData$design
+        )
+
+        ### Massage
+        localRes$gene_modified <- localData$metaInfo$gene_modified[match(
+            localRes$TXNAME, localData$metaInfo$TXNAME)]
+
+        ### Return result
+        return(list(dtuAnalysis = localRes) )
+    }
+)
+difftime(Sys.time(), tStart)
+
+print("start edgeR_diffsplice")
+
+tStart <- Sys.time()
+TasicDtuBenchmark_edgeRdiffsplice <- plyr::llply(
+    .data = TasicBenchmarkData,
+    .parallel = doParallel,
+    .progress = doProgress,
+    .inform = TRUE,
+    .fun = function(localData) {
+        ### Perform DTU analysis
+        localRes <- edgeR_diffsplice_DTU(
+            countData  = localData$data,
+            tx2gene    = localData$metaInfo,
+            sampleData = localData$design
+        )
+        ### Massage
+        localRes$gene_modified <- localData$metaInfo$gene_modified[match(
+            localRes$TXNAME, localData$metaInfo$TXNAME)]
+
+
+        ### Return result
+        return(list(dtuAnalysis = localRes))
+    }
+)
+difftime(Sys.time(), tStart)
+
+print("start DoubleExpSeq")
+
+tStart <- Sys.time()
+TasicDtuBenchmark_DoubleExpSeq <- plyr::llply(
+    .data = TasicBenchmarkData,
+    .parallel = doParallel,
+    .progress = doProgress,
+    .inform = TRUE,
+    .fun = function(localData) {
+        ### Perform DTU analysis
+        localRes <- DoubleExpSeq_DTU(
+            countData  = localData$data,
+            tx2gene    = localData$metaInfo,
+            sampleData = localData$design
+        )
+
+        ### Massage
+        localRes$gene_modified <- localData$metaInfo$gene_modified[match(
+            localRes$TXNAME, localData$metaInfo$TXNAME)]
+
+        ### Return result
+        return(list(dtuAnalysis = localRes))
+    }
+)
+difftime(Sys.time(), tStart)
+
+
+print("start DEXSeq")
+
+# DEXSeq
+tStart <- Sys.time()
+TasicDtuBenchmark_DEXSeq <- plyr::llply(
+    .data = TasicBenchmarkData,
+    .parallel = doParallel,
+    .progress = doProgress,
+    .inform = TRUE,
+    .fun = function(localData) {
+        
+        if(ncol(localData$data) > 40) {
+            return(NULL)
         }
-    ))
-    difftime(Sys.time(), tStart)
-    
-    print("start limma diffsplice")
+      
+        ### Perform DTU analysis
+        localRes <- DEXSeq_DTU(
+            countData  = localData$data,
+            tx2gene    = localData$metaInfo,
+            sampleData = localData$design
+        )
 
-    # limma_diffsplice_DTU : Runtime - fast - done
-    TasicDtuBenchmark_limmaDiffsplice <- plyr::llply(
-        .data = TasicBenchmarkData,
-        .parallel = doParallel,
-        .progress = doProgress,
-        .inform = TRUE,
-        .fun = function(localData) {
-            ### Perform DTU analysis
-            t0 <- Sys.time()
-            localRes <- limma_diffsplice_DTU(
-                countData  = localData$data,
-                tx2gene    = localData$metaInfo,
-                sampleData = localData$design
-            )
-            testTime <- as.numeric( difftime(Sys.time(), t0, units = 'secs') )
+        ### Massage
+        localRes$gene_modified <- localData$metaInfo$gene_modified[match(
+            localRes$TXNAME, localData$metaInfo$TXNAME)]
 
-            ### Massage
-            localRes$gene_modified <- localData$metaInfo$gene_modified[match(
-                localRes$TXNAME, localData$metaInfo$TXNAME
-            )]
+        ### Return result
+        return(list(dtuAnalysis = localRes))
+    }
+)
+difftime(Sys.time(), tStart)
 
-            ### Return result
-            return(
-                list(
-                    dtuAnalysis = localRes,
-                    runtime = testTime
-                )
-            )
+print("start DRIMSeq")
+
+tStart <- Sys.time()
+TasicDtuBenchmark_DRIMSeq <- plyr::llply(
+    .data = TasicBenchmarkData,
+    .parallel = doParallel,
+    .progress = doProgress,
+    .inform = TRUE,
+    .fun = function(localData) {
+      
+        if(ncol(localData$data) > 40) {
+            return(NULL)
         }
-    )
-    
-    
-    ## edgeR_diffsplice
-    print("start edgeR_diffsplice")
+      
+        ### Perform DTU analysis
+        localRes <- DRIMSeq_DTU(
+            countData  = localData$data,
+            tx2gene    = localData$metaInfo,
+            sampleData = localData$design
+        )
+        ### Massage
+        localRes$gene_modified <- localData$metaInfo$gene_modified[match(
+            localRes$TXNAME, localData$metaInfo$TXNAME)]
 
-    TasicDtuBenchmark_edgeRdiffsplice <- plyr::llply(
-        .data = TasicBenchmarkData,
-        .parallel = doParallel,
-        .progress = doProgress,
-        .inform = TRUE,
-        .fun = function(localData) {
-            ### Perform DTU analysis
-            t0 <- Sys.time()
-            localRes <- edgeR_diffsplice_DTU(
-                countData  = localData$data,
-                tx2gene    = localData$metaInfo,
-                sampleData = localData$design
-            )
-            testTime <- as.numeric(difftime(Sys.time(), t0, units = 'secs') )
+        ### Return result
+        return(list(dtuAnalysis = localRes))
+    }
+)
+difftime(Sys.time(), tStart)
 
-            ### Massage
-            localRes$gene_modified <- localData$metaInfo$gene_modified[match(
-                localRes$TXNAME, localData$metaInfo$TXNAME
-            )]
+### add method name to list names for easy post-analysis
+names(TasicDtuBenchmark_satuRn) <- paste0('satuRn_', names(TasicDtuBenchmark_satuRn))
+names(TasicDtuBenchmark_limmaDiffsplice) <- paste0('limma_diffsplice_', names(TasicDtuBenchmark_limmaDiffsplice))
+names(TasicDtuBenchmark_DEXSeq) <- paste0('DEXSeq_', names(TasicDtuBenchmark_DEXSeq))
+names(TasicDtuBenchmark_DRIMSeq) <- paste0('DRIMSeq_', names(TasicDtuBenchmark_DRIMSeq))
+names(TasicDtuBenchmark_edgeRdiffsplice) <- paste0('edgeR_diffsplice_'        , names(TasicDtuBenchmark_edgeRdiffsplice))
+names(TasicDtuBenchmark_DoubleExpSeq) <- paste0('DoubleExpSeq_', names(TasicDtuBenchmark_DoubleExpSeq))
 
+### Save result
+save(TasicDtuBenchmark_satuRn,
+    TasicDtuBenchmark_limmaDiffsplice,
+    TasicDtuBenchmark_DEXSeq,
+    TasicDtuBenchmark_DRIMSeq,
+    TasicDtuBenchmark_edgeRdiffsplice,
+    TasicDtuBenchmark_DoubleExpSeq,
+    file="./Data/03_Tasic_DTU_results_count.Rdata")
 
-            ### Return result
-            return(
-                list(
-                    dtuAnalysis = localRes,
-                    runtime = testTime
-                )
-            )
-        }
-    )
-    
-    print("start DoubleExpSeq")
-
-    TasicDtuBenchmark_DoubleExpSeq <- plyr::llply(
-        .data = TasicBenchmarkData,
-        .parallel = doParallel,
-        .progress = doProgress,
-        .inform = TRUE,
-        .fun = function(localData) {
-            ### Perform DTU analysis
-            t0 <- Sys.time()
-            localRes <- DoubleExpSeq_DTU(
-                countData  = localData$data,
-                tx2gene    = localData$metaInfo,
-                sampleData = localData$design
-            )
-            testTime <- as.numeric(difftime(Sys.time(), t0, units = 'secs') )
-
-            ### Massage
-            localRes$gene_modified <- localData$metaInfo$gene_modified[match(
-                localRes$TXNAME, localData$metaInfo$TXNAME
-            )]
-
-            ### Return result
-            return(
-                list(
-                    dtuAnalysis = localRes,
-                    runtime = testTime
-                )
-            )
-        }
-    )
-
-    
-    print("start DEXSeq")
-
-    # DEXSeq
-    tStart <- Sys.time()
-    TasicDtuBenchmark_DEXSeq <- plyr::llply(
-        .data = TasicBenchmarkData,
-        .parallel = doParallel,
-        .progress = doProgress,
-        .inform = TRUE,
-        .fun = function(localData) {
-            
-            if(ncol(localData$data) > 40) {
-                return(NULL)
-            }
-          
-            ### Perform DTU analysis
-            t0 <- Sys.time()
-            localRes <- DEXSeq_DTU(
-                countData  = localData$data,
-                tx2gene    = localData$metaInfo,
-                sampleData = localData$design
-            )
-            testTime <- as.numeric(difftime(Sys.time(), t0, units = 'secs') )
-
-            ### Massage
-            localRes$gene_modified <- localData$metaInfo$gene_modified[match(
-                localRes$TXNAME, localData$metaInfo$TXNAME
-            )]
-
-            ### Return result
-            return(
-                list(
-                    dtuAnalysis = localRes,
-                    runtime = testTime
-                )
-            )
-        }
-    )
-    difftime(Sys.time(), tStart)
-    
-    print("start DRIMSeq")
-
-    tStart <- Sys.time()
-    TasicDtuBenchmark_DRIMSeq <- plyr::llply(
-        .data = TasicBenchmarkData,
-        .parallel = doParallel,
-        .progress = doProgress,
-        .inform = TRUE,
-        .fun = function(localData) {
-          
-            if(ncol(localData$data) > 40) {
-                return(NULL)
-            }
-          
-            ### Perform DTU analysis
-            t0 <- Sys.time()
-            localRes <- DRIMSeq_DTU(
-                countData  = localData$data,
-                tx2gene    = localData$metaInfo,
-                sampleData = localData$design
-            )
-            testTime <- as.numeric( difftime(Sys.time(), t0, units = 'secs') )
-
-            ### Massage
-            localRes$gene_modified <- localData$metaInfo$gene_modified[match(
-                localRes$TXNAME, localData$metaInfo$TXNAME
-            )]
-
-            ### Return result
-            return(
-                list(
-                    dtuAnalysis = localRes,
-                    runtime = testTime
-               )
-           )
-        }
-    )
-    difftime(Sys.time(), tStart)
-    
-    ### add method name to list names for easy post-analysis
-    names(TasicDtuBenchmark_quasiBinomial) <- paste0('quasiBinomial_'    , names(TasicDtuBenchmark_quasiBinomial))
-    names(TasicDtuBenchmark_limmaDiffsplice) <- paste0('limma_diffsplice_', names(TasicDtuBenchmark_limmaDiffsplice))
-    names(TasicDtuBenchmark_DEXSeq)          <- paste0('DEXSeq_'         , names(TasicDtuBenchmark_DEXSeq))
-    names(TasicDtuBenchmark_DRIMSeq)         <- paste0('DRIMSeq_'        , names(TasicDtuBenchmark_DRIMSeq))
-    names(TasicDtuBenchmark_edgeRdiffsplice)   <- paste0('edgeR_diffsplice_'        , names(TasicDtuBenchmark_edgeRdiffsplice))
-    names(TasicDtuBenchmark_DoubleExpSeq)   <- paste0('DoubleExpSeq_'        , names(TasicDtuBenchmark_DoubleExpSeq))
-    
-    ### Save result
-    save(
-        TasicDtuBenchmark_quasiBinomial,
-        TasicDtuBenchmark_limmaDiffsplice,
-        TasicDtuBenchmark_DEXSeq,
-        TasicDtuBenchmark_DRIMSeq,
-        TasicDtuBenchmark_edgeRdiffsplice,
-        TasicDtuBenchmark_DoubleExpSeq,
-        file='02_Tasic_DTU_analysis_count.Rdata'
-    )
-    
-    # save(
-    #     TasicDtuBenchmark_quasiBinomial,
-    #     TasicDtuBenchmark_limmaDiffsplice,
-    #     TasicDtuBenchmark_DEXSeq,
-    #     TasicDtuBenchmark_DRIMSeq,
-    #     TasicDtuBenchmark_edgeRdiffsplice,
-    #     TasicDtuBenchmark_DoubleExpSeq,
-    #     file='02_Tasic_DTU_analysis_scaledTPM.Rdata'
-    # )
-}
+# save(TasicDtuBenchmark_satuRn,
+#     TasicDtuBenchmark_limmaDiffsplice,
+#     TasicDtuBenchmark_DEXSeq,
+#     TasicDtuBenchmark_DRIMSeq,
+#     TasicDtuBenchmark_edgeRdiffsplice,
+#     TasicDtuBenchmark_DoubleExpSeq,
+#     file=./Data/03_Tasic_DTU_results_scaledTPM.Rdata)
 ```
 
 

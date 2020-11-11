@@ -1,7 +1,14 @@
 ---
-title: "Tasic_analysis_L5IT_limma"
+title: "limmaDiffsplice_analysis"
+author: "Jeroen Gilis"
+date: "11/11/2020"
 output: html_document
 ---
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
 
 # Load libraries
 
@@ -23,13 +30,9 @@ library(ggplot2)
 ## Import transcript information
 
 ```{r, message=FALSE}
-## Load the annotation resource.
-ah <- AnnotationHub()
-
-## Query for all available EnsDb databases
-all <- query(ah, "EnsDb")
-
-ahEdb <- all[["AH75036"]] #for Mus musculus
+ah <- AnnotationHub() # Load the annotation resource.
+all <- query(ah, "EnsDb") # Query for all available EnsDb databases
+ahEdb <- all[["AH75036"]] # for Mus musculus
 
 txs <- transcripts(ahEdb)
 tx2gene <- as.data.frame(matrix(data = NA, nrow = length(txs), ncol = 2))
@@ -41,25 +44,24 @@ tx2gene$GENEID <- txs$gene_id
 ## Import counts
 
 ```{r}
-quant_sf <- readRDS("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Tasic_case_data/quantsf_counts_L5IT")
-
+Tasic_counts <- readRDS("./Data/Tasic_caseStudy_transcript_counts.Rds")
 # Already remove genes with zero counts in all cells
-quant_sf <- quant_sf[rowSums(quant_sf) != 0,]
-dim(quant_sf)
+Tasic_counts <- Tasic_counts[rowSums(Tasic_counts) != 0,]
+dim(Tasic_counts)
 ```
 
 ## Import metadata
 
 ```{r}
-access <- read.csv2("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Tasic_data/GSE115746_accession_table.csv",sep = "\t")
-access <- access[match(colnames(quant_sf),access$SRA_Run),]
+access <- read.csv2("./Data/Tasic_metadata_2.csv",sep = "\t")
+access <- access[match(colnames(Tasic_counts),access$SRA_Run),]
 
-metaData <- openxlsx::read.xlsx("/Users/jg/Desktop/PhD/DTU_project/single_cell/Tasic/supplementary_tables/Supplementary_Table_10_Full_Metadata.xlsx")
+metaData <- openxlsx::read.xlsx("./Data/Tasic_metadata_1.xlsx")
 metaData <- metaData[match(access$sample_name,metaData$sample_name),]
 
-colnames(quant_sf) <- metaData$sample_name
+colnames(Tasic_counts) <- metaData$sample_name
 metaData <- metaData[metaData$core_intermediate_call == "Core",] # only retain cell that were unambiguously assigned to a certain cell type (cluster)
-quant_sf <- quant_sf[,metaData$sample_name]
+Tasic_counts <- Tasic_counts[,metaData$sample_name]
 metaData <- metaData[,c("sample_name", "brain_region","cluster")]
 ```
 
@@ -71,12 +73,11 @@ txInfo <- tx2gene
 colnames(txInfo) <- c('isoform_id','gene_id')
 rownames(txInfo) <- NULL
 
-rownames(quant_sf) <- sub("\\..*", "", rownames(quant_sf))
-txInfo <- txInfo[txInfo$isoform_id %in% rownames(quant_sf),]
+rownames(Tasic_counts) <- sub("\\..*", "", rownames(Tasic_counts))
+txInfo <- txInfo[txInfo$isoform_id %in% rownames(Tasic_counts),]
 txInfo <- subset(txInfo,duplicated(gene_id) | duplicated(gene_id, fromLast=TRUE))
 
-quant_sf <- quant_sf[which(rownames(quant_sf) %in% txInfo$isoform_id),]
-dim(quant_sf)
+Tasic_counts <- Tasic_counts[which(rownames(Tasic_counts) %in% txInfo$isoform_id),]
 ```
 
 # Set up the experimental design
@@ -91,16 +92,16 @@ remove <- names(table(interaction(metaData$brain_region,metaData$cluster))[table
 metaData <- metaData[-which(metaData$group %in% remove),]
 group <- as.factor(metaData$group)
  
-design_full <- model.matrix(~ 0 + group) # Factorial design
-colnames(design_full) <- levels(group)
+design <- model.matrix(~ 0 + group) # Factorial design
+colnames(design) <- levels(group)
 
-quant_sf <- quant_sf[,which(colnames(quant_sf) %in% metaData$sample_name)]
+Tasic_counts <- Tasic_counts[,which(colnames(Tasic_counts) %in% metaData$sample_name)]
 ```
 
-Gene-level iltering
+# Filtering
 
 ```{r}
-filter_all_edgeR_stringent <- filterByExpr(quant_sf,
+filter_all_edgeR_stringent <- filterByExpr(Tasic_counts,
              design = NULL,
              group = metaData$brain_region,
              lib.size = NULL,
@@ -110,28 +111,23 @@ filter_all_edgeR_stringent <- filterByExpr(quant_sf,
              min.prop = 0.7)
 
 table(filter_all_edgeR_stringent)
-quant_sf <- quant_sf[filter_all_edgeR_stringent,]
-
-dim(quant_sf)
+Tasic_counts <- Tasic_counts[filter_all_edgeR_stringent,]
 ```
 
 ```{r}
 # Update txInfo according to the filtering procedure
-txInfo <- txInfo[which(txInfo$isoform_id %in% rownames(quant_sf)),]
+txInfo <- txInfo[which(txInfo$isoform_id %in% rownames(Tasic_counts)),]
 
 # remove transcripts that are the only isoform expressed of a certain gene (after filtering)
 txInfo <- subset(txInfo,duplicated(gene_id) | duplicated(gene_id, fromLast=TRUE))
 
-quant_sf <- quant_sf[which(rownames(quant_sf) %in% txInfo$isoform_id),]
-dim(quant_sf)
+Tasic_counts <- Tasic_counts[which(rownames(Tasic_counts) %in% txInfo$isoform_id),]
 
-rm(list = setdiff(ls(), c("quant_sf", "txInfo", "design_full", "metaData", "tx2gene","group")))
+# satuRn require the transcripts in the rowData and the transcripts in the count matrix to be in the same order. If not, the resulting models will be matched to the wrong rowData
+txInfo <- txInfo[match(rownames(Tasic_counts),txInfo$isoform_id),]
+
+rm(list = setdiff(ls(), c("Tasic_counts", "txInfo", "design", "metaData", "tx2gene","group")))
 invisible(gc())
-```
-
-```{r}
-# satuRn require the transcripts in the rowData and the transcripts in the count matrix to be in the same order. If not, the resulting models (note that these are named themselves) will be matched to the wrong rowData
-txInfo <- txInfo[match(rownames(quant_sf),txInfo$isoform_id),]
 ```
 
 # Analysis
@@ -139,15 +135,15 @@ txInfo <- txInfo[match(rownames(quant_sf),txInfo$isoform_id),]
 ## Fit, set contrasts, test
 
 ```{r}
-geneForEachTx <- txInfo$gene_id[match(rownames(quant_sf),txInfo$isoform_id)]
-y <- DGEList(counts = quant_sf, group=as.factor(metaData$group), genes = geneForEachTx)
+geneForEachTx <- txInfo$gene_id[match(rownames(Tasic_counts),txInfo$isoform_id)]
+y <- DGEList(counts = Tasic_counts, group=as.factor(metaData$group), genes = geneForEachTx)
 
 y <- calcNormFactors(y)
 
-v <- voom(y, design_full, plot=F)
-fit <- lmFit(v, design_full)
+v <- voom(y, design, plot=F)
+fit <- lmFit(v, design)
 
-contrast.matrix <- makeContrasts(VISp.L5_IT_VISp_Batf3-ALM.L5_IT_ALM_Cpa6_Gpr88, VISp.L5_IT_VISp_Col27a1-ALM.L5_IT_ALM_Cbln4_Fezf2, VISp.L5_IT_VISp_Col6a1_Fezf2-ALM.L5_IT_ALM_Cpa6_Gpr88, VISp.L5_IT_VISp_Col6a1_Fezf2-ALM.L5_IT_ALM_Gkn1_Pcdh19, VISp.L5_IT_VISp_Hsd11b1_Endou-ALM.L5_IT_ALM_Lypd1_Gpr88, VISp.L5_IT_VISp_Hsd11b1_Endou-ALM.L5_IT_ALM_Tnc, VISp.L5_IT_VISp_Hsd11b1_Endou-ALM.L5_IT_ALM_Tmem163_Dmrtb1, VISp.L5_IT_VISp_Whrn_Tox2-ALM.L5_IT_ALM_Tmem163_Arhgap25, levels=design_full)
+contrast.matrix <- makeContrasts(VISp.L5_IT_VISp_Batf3-ALM.L5_IT_ALM_Cpa6_Gpr88, VISp.L5_IT_VISp_Col27a1-ALM.L5_IT_ALM_Cbln4_Fezf2, VISp.L5_IT_VISp_Col6a1_Fezf2-ALM.L5_IT_ALM_Cpa6_Gpr88, VISp.L5_IT_VISp_Col6a1_Fezf2-ALM.L5_IT_ALM_Gkn1_Pcdh19, VISp.L5_IT_VISp_Hsd11b1_Endou-ALM.L5_IT_ALM_Lypd1_Gpr88, VISp.L5_IT_VISp_Hsd11b1_Endou-ALM.L5_IT_ALM_Tnc, VISp.L5_IT_VISp_Hsd11b1_Endou-ALM.L5_IT_ALM_Tmem163_Dmrtb1, VISp.L5_IT_VISp_Whrn_Tox2-ALM.L5_IT_ALM_Tmem163_Arhgap25, levels=design)
 
 fit2 <- contrasts.fit(fit, contrast.matrix)
 fit2 <- eBayes(fit2)
@@ -164,41 +160,40 @@ for (i in seq_len(ncol(ex$coefficients))) {
 
 Without correction, we obtain a huge number of DTU transcripts with the limma analysis. Therefore, we additionally post-process the results according to the empirical FDR strategy implemented in satuRn (which is adapted from the locfdr function from the locfdr package by Efron et al.).
 
-At the same time, all panels of Figures S8 and S9 of our paper are generated.
+At the same time, all panels of Figures S11 and S12 of our paper are generated.
 
 ```{r}
 limmaRes_all<- list()
 for (i in seq_len(ncol(ex$coefficients))) {
   limmaRes <- topSplice(ex, coef=i, test="t", number = Inf)
-  print(sum(limmaRes$FDR <= 0.05))
   
   t <- limmaRes$t
   pval <- limmaRes$P.Value
   FDR <- limmaRes$FDR
   
-  # Generate Figure S8
-  # png(paste("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/new_analysis/Results/Case_study_L5It/Figure_S8/pvalHist", i, ".png", sep = ""),
-  #         width     = 3.5,
-  #         height    = 2.5,
-  #         units     = "in",
-  #         res       = 300,
-  #         pointsize = 6) # start export
+  # Generate Figure S11
+  png(paste("./Results/caseStudy/FigureS11_", i, ".png", sep = ""),
+          width     = 3.5,
+          height    = 2.5,
+          units     = "in",
+          res       = 300,
+          pointsize = 6) # start export
   hist(pval, breaks=40, main = paste("contrast",i))
-  # dev.off()
+  dev.off()
   
-  # Generate Figure S9
+  # Generate Figure S12
   zval <- qnorm(pval/2)*sign(t)
   zval_mid <- zval[abs(zval) < 10]
   zval_mid <- zval_mid[!is.na(zval_mid)]
   
-  # png(paste("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/new_analysis/Results/Case_study_L5It/Figure_S9/emp", i, ".png", sep = ""),
-  #         width     = 3.5,
-  #         height    = 2.5,
-  #         units     = "in",
-  #         res       = 300,
-  #         pointsize = 6) # start export
+  png(paste("./Results/caseStudy/FigureS12_", i, ".png", sep = ""),
+          width     = 3.5,
+          height    = 2.5,
+          units     = "in",
+          res       = 300,
+          pointsize = 6) # start export
   plot_lfdr <- locfdr::locfdr(zval_mid,plot=T,main=paste("contrast",i))
-  # dev.off()
+  dev.off()
   
   empirical <- qbDTU:::p.adjust_empirical(pval,t,plot=F) # empirical FDR correction as implemented in satuRn
 
@@ -208,6 +203,7 @@ for (i in seq_len(ncol(ex$coefficients))) {
   result_limma <- data.frame(t,pval,FDR,empirical_pval,empirical_FDR)
   rownames(result_limma) <- rownames(limmaRes)
   
+  # print number of DTU transcript after working under the empirical null
   print(sum(result_limma$empirical_FDR <= 0.05))
   
   limmaRes_all[[i]] <- result_limma
@@ -219,6 +215,6 @@ for (i in seq_len(ncol(ex$coefficients))) {
 Save resulting object for later comparison of results with satuRn
 
 ```{r}
-saveRDS(limmaRes_all,"limmaRes_all.Rds")
+saveRDS(limmaRes_all,file = "./Data/Tasic_caseStudy_limmaDiffsplice.Rds")
 ```
 

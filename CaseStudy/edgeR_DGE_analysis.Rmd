@@ -1,7 +1,14 @@
 ---
-title: "Tasic_analysis_L5IT_gene"
+title: "edgeR_DGE_analysis"
+author: "Jeroen Gilis"
+date: "11/11/2020"
 output: html_document
 ---
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
 
 # Load libraries
 
@@ -16,24 +23,23 @@ library(tidyverse)
 ## Import counts
 
 ```{r}
-quant_sf_gene <- readRDS("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Tasic_case_data/quantsf_counts_gene_L5IT")
-
+Tasic_gene_counts <- readRDS("./Data/Tasic_caseStudy_gene_counts.Rds")
 # Already remove genes with zero counts in all cells
-quant_sf_gene <- quant_sf_gene[rowSums(quant_sf_gene) != 0,]
-dim(quant_sf_gene)
+Tasic_gene_counts <- Tasic_gene_counts[rowSums(Tasic_gene_counts) != 0,]
+dim(Tasic_gene_counts)
 ```
 
 ## Import metadata
 
 ```{r}
-access <- read.csv2("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Tasic_data/GSE115746_accession_table.csv",sep = "\t")
-access <- access[match(colnames(quant_sf_gene),access$SRA_Run),]
+access <- read.csv2("./Data/Tasic_metadata_2.csv",sep = "\t")
+access <- access[match(colnames(Tasic_gene_counts),access$SRA_Run),]
 
-metaData <- openxlsx::read.xlsx("/Users/jg/Desktop/PhD/DTU_project/single_cell/Tasic/supplementary_tables/Supplementary_Table_10_Full_Metadata.xlsx")
+metaData <- openxlsx::read.xlsx("./Data/Tasic_metadata_1.xlsx")
 metaData <- metaData[match(access$sample_name,metaData$sample_name),]
-colnames(quant_sf_gene) <- metaData$sample_name
+colnames(Tasic_gene_counts) <- metaData$sample_name
 metaData <- metaData[metaData$core_intermediate_call == "Core",] # only retain cell that were unambiguously assigned to a certain cell type (cluster)
-quant_sf_gene <- quant_sf_gene[,metaData$sample_name]
+Tasic_gene_counts <- Tasic_gene_counts[,metaData$sample_name]
 
 metaData <- metaData[,c("sample_name", "brain_region","cluster")]
 ```
@@ -50,14 +56,16 @@ remove <- names(table(interaction(metaData$brain_region,metaData$cluster))[table
 metaData <- metaData[-which(metaData$group %in% remove),]
 group <- as.factor(metaData$group)
  
-design_full <- model.matrix(~ 0 + group) # Factorial design
-colnames(design_full) <- levels(group)
+design <- model.matrix(~ 0 + group) # Factorial design
+colnames(design) <- levels(group)
 
-quant_sf_gene <- quant_sf_gene[,which(colnames(quant_sf_gene) %in% metaData$sample_name)]
+Tasic_gene_counts <- Tasic_gene_counts[,which(colnames(Tasic_gene_counts) %in% metaData$sample_name)]
 ```
 
+# Filtering
+
 ```{r}
-filter_all_edgeR_stringent <- filterByExpr(quant_sf_gene,
+filter_all_edgeR_stringent <- filterByExpr(Tasic_gene_counts,
              design = NULL,
              group = metaData$brain_region,
              lib.size = NULL,
@@ -67,18 +75,16 @@ filter_all_edgeR_stringent <- filterByExpr(quant_sf_gene,
              min.prop = 0.7)
 
 table(filter_all_edgeR_stringent)
-
-quant_sf_gene <- quant_sf_gene[filter_all_edgeR_stringent,]
-dim(quant_sf_gene)
+Tasic_gene_counts <- Tasic_gene_counts[filter_all_edgeR_stringent,]
 ```
 
-# Figure 6 panel D
+# Visualization: Generate Figure 6 panel D
 
-DGE figure for ENSMUSG00000029470 for contrast 6, i.e. VISp Hsd11b1 Endou cells versus ALM Tnc cells 
+DGE figure for the ENSMUSG00000029470 gene in contrast 6, i.e. VISp Hsd11b1-Endou cells versus ALM Tnc cells 
 
 ```{r}
 # prepare for plot
-plot_data <- cbind(metaData[metaData$group %in% c("ALM.L5_IT_ALM_Tnc","VISp.L5_IT_VISp_Hsd11b1_Endou"),],quant_sf_gene["ENSMUSG00000029470",metaData$group %in% c("ALM.L5_IT_ALM_Tnc","VISp.L5_IT_VISp_Hsd11b1_Endou")]) ## sample order is the same for both dataframes so we can do this
+plot_data <- cbind(metaData[metaData$group %in% c("ALM.L5_IT_ALM_Tnc","VISp.L5_IT_VISp_Hsd11b1_Endou"),],Tasic_gene_counts["ENSMUSG00000029470",metaData$group %in% c("ALM.L5_IT_ALM_Tnc","VISp.L5_IT_VISp_Hsd11b1_Endou")]) ## sample order is the same for both dataframes so we can do this
 colnames(plot_data)[5] <- "counts"
 
 plot_data$group[which(plot_data$group == "VISp.L5_IT_VISp_Hsd11b1_Endou")] <- "Hsd11b1_Endou"
@@ -95,14 +101,12 @@ label_facet <- function(geneID){
 }
 
 # plot
-
-# png("CaseStudy_results/ENSMUSG00000029470_DTU.png",
-#     width     = 5,
-#     height    = 5,
-#     units     = "in",
-#     res       = 200,
-#     pointsize = 4)
-
+png("./Results/caseStudy/Figure6D.png",
+    width     = 5,
+    height    = 5,
+    units     = "in",
+    res       = 200,
+    pointsize = 4)
 ggplot(plot_data, mapping = aes(x=group,y=counts,fill=brain_region)) +
   geom_violin() +
   scale_fill_manual(values=c("royalblue4", "firebrick")) +
@@ -118,31 +122,28 @@ ggplot(plot_data, mapping = aes(x=group,y=counts,fill=brain_region)) +
   theme(plot.subtitle = element_text(size = 7)) +
   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size=8)) +
   theme(strip.text = element_text(size = 7,face="bold"))
-
-# dev.off()
+dev.off()
 
 #plot_data$counts_scaled <- plot_data$counts/y$samples$norm.factors[metaData$group %in% c("ALM.L5_IT_ALM_Tnc","VISp.L5_IT_VISp_Hsd11b1_Endou")]
 ```
 
 # DGE analysis with edgeR
 
-## fit models
+## Fit models
 
 ```{r}
-y <- DGEList(counts=quant_sf_gene, group=group)
+y <- DGEList(counts=Tasic_gene_counts, group=group)
 y <- calcNormFactors(y)
-
-y <- estimateDisp(y,design = design_full) # takes about 4 minutes
-
-fit <- glmQLFit(y, design =  design_full) # fast
+y <- estimateDisp(y,design = design) # takes about 4 minutes
+fit <- glmQLFit(y, design =  design) # fast
 ```
 
-## construct design matrix
+## Construct design matrix
 
 ```{r}
 # Create same contrast matrix as for DTU analysis (same as original Tasic et al. analysis)
-L <- matrix(0, ncol = 8, nrow = ncol(design_full))
-rownames(L) <- colnames(design_full)
+L <- matrix(0, ncol = 8, nrow = ncol(design))
+rownames(L) <- colnames(design)
 colnames(L) <- c("C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8")
 
 L[c("VISp.L5_IT_VISp_Batf3", "ALM.L5_IT_ALM_Cpa6_Gpr88"), 1] <- c(1,-1)
@@ -159,9 +160,8 @@ L[c("VISp.L5_IT_VISp_Whrn_Tox2", "ALM.L5_IT_ALM_Tmem163_Arhgap25"), 8] <- c(1,-1
 
 ```{r}
 # with TREAT (~fold-change threshold)
-resultsTreat <- apply(L, 2, function(i) glmTreat(glmfit=fit_stringent, contrast=i, lfc=1))
+resultsTreat <- apply(L, 2, function(i) glmTreat(glmfit=fit, contrast=i, lfc=1))
 topTreat <- lapply(resultsTreat, topTags, n=nrow(y)) # takes about four minutes
-save(topTreat, file="topTreat_DGE.Rda") # save to access later in comparison script
 
 # show number of DE genes
 sigsTreat_5 <- c()
@@ -178,17 +178,24 @@ sum(sigsTreat_5)  # total number of DE genes
 Get significant DE genes on 5% FDR after edgeR + TREAT
 
 ```{r}
-sink(file = "GSEA/Tasic_L5IT_contrast5_DGE.txt")
+sink(file = "./Results/CaseStudy/GSEA/Tasic_L5IT_contrast5_edgeR_DGE.txt")
 cat(rownames(topTreat[[5]]$table[topTreat[[5]]$table$FDR <= 0.05,]), "\n")
 sink()
 
-sink(file = "GSEA/Tasic_L5IT_contrast6_DGE.txt")
+sink(file = "./Results/CaseStudy/GSEA/Tasic_L5IT_contrast6_edgeR_DGE.txt")
 cat(rownames(topTreat[[6]]$table[topTreat[[6]]$table$FDR <= 0.05,]), "\n")
 sink()
 
-sink(file = "GSEA/Tasic_L5IT_contrast7_DGE.txt")
+sink(file = "./Results/CaseStudy/GSEA/Tasic_L5IT_contrast7_edgeR_DGE.txt")
 cat(rownames(topTreat[[7]]$table[topTreat[[7]]$table$FDR <= 0.05,]), "\n")
 sink()
 # When supplying this .txt file to the GSEA engine of MSigDB, there is strong evidence for enrichment in the biological processes related to synapses, neuron projection, which are very interesting in the context of the Tasic et al. paper.
 ```
+
+# Save results
+
+```{r}
+saveRDS(topTreat, file="./Data/Tasic_caseStudy_edgeR.Rds") # save to access later in comparison script
+```
+
 

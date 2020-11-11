@@ -1,7 +1,14 @@
 ---
-title: "readResults_evenNewer"
+title: "scalabilityBenchmark"
+author: "Jeroen Gilis"
+date: "11/11/2020"
 output: html_document
 ---
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
 
 Load libraries
 
@@ -13,45 +20,45 @@ library(tidyverse)
 Read all results
 
 ```{r}
-# read quasiBinomial results
-load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_quasiBinomial_1.RData")
-load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_quasiBinomial_2.RData")
+# read satuRn results
+load("./Data/Scalability_runtimes/satuRn_1.RData")
+load("./Data/Scalability_runtimes/satuRn_2.RData")
 
 # read limmaDiffsplice results
-load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_limmaDiffsplice_1.RData")
-load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_limmaDiffsplice_2.RData")
+load("./Data/Scalability_runtimes/limmaDiffsplice_1.RData")
+load("./Data/Scalability_runtimes/limmaDiffsplice_2.RData")
 
 # read edgeRDiffsplice results
-load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_edgeRDiffsplice_1.RData")
-load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_edgeRDiffsplice_2.RData")
+load("./Data/Scalability_runtimes/edgeRDiffsplice_1.RData")
+load("./Data/Scalability_runtimes/edgeRDiffsplice_2.RData")
 
 # read DRIMSeq results
-load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_DRIMSeq_1.RData")
-load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_DRIMSeq_2.RData")
+load("./Data/Scalability_runtimes/DRIMSeq_1.RData")
+load("./Data/Scalability_runtimes/DRIMSeq_2.RData")
 
 # read DoubleExpSeq results
-load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_DoubleExpSeq_1.RData")
-load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_DoubleExpSeq_2.RData")
+load("./Data/Scalability_runtimes/DoubleExpSeq_1.RData")
+load("./Data/Scalability_runtimes/DoubleExpSeq_2.RData")
 
 # read DEXSeq results
-load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_DEXSeq_2.RData")
-load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_DEXSeq_3.RData")
-load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_DEXSeq_4.RData")
+load("./Data/Scalability_runtimes/DEXSeq_2.RData")
+load("./Data/Scalability_runtimes/DEXSeq_3.RData")
+load("./Data/Scalability_runtimes/DEXSeq_4.RData")
 
 # read BANDITS results
-load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_BANDITS_5.RData")
-load("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Benchmarks/Scalability/data/finalOutput_BANDITS_6.RData")
+load("./Data/Scalability_runtimes/BANDITS_5.RData")
+load("./Data/Scalability_runtimes/BANDITS_6.RData")
 ```
 
 Concatenate all results
 
 ```{r}
-finalOutput_all <- c(finalOutput_quasiBinomial_1,finalOutput_quasiBinomial_2,finalOutput_limmaDiffsplice_1,finalOutput_limmaDiffsplice_2,finalOutput_edgeRDiffsplice_1,finalOutput_edgeRDiffsplice_2,finalOutput_DRIMSeq_1,finalOutput_DRIMSeq_2,finalOutput_DoubleExpSeq_1,finalOutput_DoubleExpSeq_2,finalOutput_DEXSeq_2,finalOutput_DEXSeq_3,finalOutput_DEXSeq_4,finalOutput_BANDITS_5,finalOutput_BANDITS_6)
-rm(list=setdiff(ls(), "finalOutput_all"))
+Results_all <- c(satuRn_1,satuRn_2,limmaDiffsplice_1,limmaDiffsplice_2,edgeRDiffsplice_1,edgeRDiffsplice_2,DRIMSeq_1,DRIMSeq_2,DoubleExpSeq_1,DoubleExpSeq_2,DEXSeq_2,DEXSeq_3,DEXSeq_4,BANDITS_5,BANDITS_6)
+rm(list=setdiff(ls(), "Results_all"))
 ```
 
 ```{r}
-full_dataframe <-  as.data.frame(matrix(nrow = length(finalOutput_all), ncol=10))
+full_dataframe <-  as.data.frame(matrix(nrow = length(Results_all), ncol=10))
 colnames(full_dataframe) <- c("method", "groupSize", "TXs", "TXs_round", "user", "system", "elapsed", "DTU", "removed", "memory")
 
 full_dataframe$method <- rep(c("satuRn","limmaDiffsplice","edgeRDiffsplice","DRIMSeq","DoubleExpSeq","DEXSeq","BANDITS"),times=c(24,24,24,24,24,16,7)) # add method labels
@@ -60,28 +67,28 @@ round_to <- function(x, to = 1000) round(x/to)*to
 
 # get data in dataframe format
 for (i in seq_len(nrow(full_dataframe))) {
-  full_dataframe$groupSize[i] <- finalOutput_all[[i]]$info$size
-  full_dataframe$TXs[i] <- finalOutput_all[[i]]$info$TXs
+  full_dataframe$groupSize[i] <- Results_all[[i]]$info$size
+  full_dataframe$TXs[i] <- Results_all[[i]]$info$TXs
   full_dataframe$TXs_round[i] <- round_to(full_dataframe$TXs[i])
-  full_dataframe$user[i] <- unname(finalOutput_all[[i]]$timing[1])
-  full_dataframe$system[i] <- unname(finalOutput_all[[i]]$timing[2])
-  full_dataframe$elapsed[i] <- unname(finalOutput_all[[i]]$timing[3])
-  full_dataframe$DTU[i] <- ifelse(is.null(finalOutput_all[[i]]$result),NA,finalOutput_all[[i]]$result)
-  full_dataframe$removed[i] <- finalOutput_all[[i]]$removed
-  full_dataframe$memory[i] <- finalOutput_all[[i]]$memory[4]
+  full_dataframe$user[i] <- unname(Results_all[[i]]$timing[1])
+  full_dataframe$system[i] <- unname(Results_all[[i]]$timing[2])
+  full_dataframe$elapsed[i] <- unname(Results_all[[i]]$timing[3])
+  full_dataframe$DTU[i] <- ifelse(is.null(Results_all[[i]]$result),NA,Results_all[[i]]$result)
+  full_dataframe$removed[i] <- Results_all[[i]]$removed
+  full_dataframe$memory[i] <- Results_all[[i]]$memory[4]
 }
 ```
 
----
+# Visualizations
 
-# Scalability w.r.t. number of cells (1)
+## Scalability w.r.t. number of cells (1)
 
 Without our method, used to generate Figure 1, panel B from our paper.
 
 ```{r}
 data_30K <- full_dataframe[which(full_dataframe$TXs_round == 30000),]
 
-png("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Results/Scalability/scale_cells_intro.png",
+png("./Results/Scalability/scale_cells_intro.png",
   width     = 5,
   height    = 5,
   units     = "in",
@@ -99,14 +106,14 @@ ggplot(data = data_30K[-which(data_30K$method == "satuRn"),], aes(x=groupSize,y=
 dev.off()
 ```
 
-# Scalability w.r.t. number of transcripts (1)
+## Scalability w.r.t. number of transcripts (1)
 
 Without our method, used to generate Figure 1, panel C from our paper.
 
 ```{r}
 data_16cells <- full_dataframe[which(full_dataframe$groupSize == 16),]
 
-png("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Results/Scalability/scale_transcripts_intro.png",
+png("./Results/Scalability/scale_transcripts_intro.png",
   width     = 5,
   height    = 5,
   units     = "in",
@@ -124,12 +131,12 @@ ggplot(data = data_16cells[-which(data_16cells$method == "satuRn"),], aes(x=TXs,
 dev.off()
 ```
 
-# Scalability w.r.t. number of cells (2)
+## Scalability w.r.t. number of cells (2)
 
-Including our method, used to generate Figure 5, panels A from our paper.
+Including our method, used to generate Figure 5, panel A from our paper.
 
 ```{r}
-png("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Results/Scalability/scale_cells_all.png",
+png("./Results/Scalability/scale_cells_all.png",
   width     = 5,
   height    = 5,
   units     = "in",
@@ -149,7 +156,7 @@ dev.off()
 
 ```{r}
 # zoom
-png("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Results/Scalability/scale_cells_all_zoom.png",
+png("./Results/Scalability/scale_cells_all_zoom.png",
   width     = 5,
   height    = 5,
   units     = "in",
@@ -167,12 +174,12 @@ ggplot(data = data_30K[-which(data_30K$method %in% c("DEXSeq","DRIMSeq")),], aes
 dev.off()
 ```
 
-# Scalability w.r.t. number of transcripts (2)
+## Scalability w.r.t. number of transcripts (2)
 
-Including our method, used to generate Figure 5, panels B from our paper.
+Including our method, used to generate Figure 5, panel B from our paper.
 
 ```{r}
-png("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Results/Scalability/scale_transcripts_all.png",
+png("./Results/Scalability/scale_transcripts_all.png",
   width     = 5,
   height    = 5,
   units     = "in",
@@ -192,7 +199,7 @@ dev.off()
 
 ```{r}
 # zoom
-png("/Users/jg/Desktop/PhD/DTU_project/DTU_paper/Results/Scalability/scale_transcripts_all_zoom.png",
+png("./Results/Scalability/scale_transcripts_all_zoom.png",
   width     = 5,
   height    = 5,
   units     = "in",

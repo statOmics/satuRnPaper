@@ -3,6 +3,8 @@ title: "Chen_getData"
 output: html_document
 ---
 
+Data: 27Gb
+
 I must still add the bash script for the salmon quantification
 
 ```{r}
@@ -61,8 +63,8 @@ colnames(quantsf$counts) <- selected
 ```
 
 ```{r}
-saveRDS(quantsf$counts, file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Chen_data/quantsf_count")
-#saveRDS(quantsf$counts, file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/new_analysis/Data/Chen_data/quantsf_scaledTPM")
+saveRDS(quantsf$counts, file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Chen_data/Chen_counts.Rds")
+#saveRDS(quantsf$counts, file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/new_analysis/Data/Chen_data/quantsf_scaledTPM.Rds")
 ```
 
 

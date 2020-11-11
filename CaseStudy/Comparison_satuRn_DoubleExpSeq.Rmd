@@ -1,0 +1,116 @@
+---
+title: "Comparison_satuRn_DoubleExpSeq"
+author: "Jeroen Gilis"
+date: "11/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+# Load libraries
+
+```{r, message=FALSE, warning=FALSE}
+library(SummarizedExperiment)
+library(satuRn)
+library(ggplot2)
+library(tidyverse)
+library(locfdr)
+```
+
+# Load data
+
+These are the results of the analyses of the Tasic case study with satuRn (generated in satuRn_analysis.Rmd) and DoubleExpSeq (generated in DoubleExpSeq_analysis.Rmd).
+
+```{r}
+satuRn_results <- readRDS(file="./Data/Tasic_caseStudy_satuRn.Rds")
+DoubleExpSeq_results <- readRDS(file="./Data/Tasic_caseStudy_DoubleExpSeq.Rds")
+```
+
+# DoubleExpSeq p-value distribution
+
+DoubleExpSeq displays a pathological distribution of p-values.
+
+```{r}
+for (i in seq_along(DoubleExpSeq_results)) {
+    png(paste("./Results/caseStudy/FigureS10_", i, ".png", sep = ""),
+            width     = 3.5,
+            height    = 2.5,
+            units     = "in",
+            res       = 300,
+            pointsize = 6) # start export
+    hist(DoubleExpSeq_results[[i]]$All[,"pVal"],breaks=40,main = paste("contrast", i),xlab="p-values")
+    dev.off()
+}
+```
+
+# DES finds a large number of DTU transcripts
+
+```{r}
+for (i in seq_along(DoubleExpSeq_results)) {
+    print(sum(DoubleExpSeq_results[[i]]$All[,"Adj.pVal"] < 0.05,na.rm = T))
+}
+```
+
+# Using locFDR on the results by DoubleExpSeq is problematic
+
+```{r}
+DoubleExpSeq_results_locfdr <- list()
+for (i in seq_along(DoubleExpSeq_results)) {
+  
+  direction <- ifelse(DoubleExpSeq_results[[i]]$All[,1]-DoubleExpSeq_results[[i]]$All[,2] <= 0, 1,-1)
+  pval <- DoubleExpSeq_results[[i]]$All[,"pVal"]
+  FDR <- DoubleExpSeq_results[[i]]$All[,"Adj.pVal"]
+  
+  # direction <- direction[-which(pval==1)]
+  # FDR <- FDR[-which(pval==1)]
+  # pval <- pval[-which(pval==1)]
+
+  z <- qnorm(pval/2) * sign(direction)
+  z_working <- z[!is.na(z)]
+  z_working <- z_working[abs(z_working) < 10]
+  current_plot <- locfdr(z_working)
+  
+  mlests <- satuRn:::p.adjust_empirical_hlp(z_working)
+ 
+  zval_empirical <- (z - mlests[1])/mlests[2]
+  pval_empirical <- 2 * pnorm(-abs(zval_empirical), mean = 0, sd = 1)
+  pval_empirical[zval_empirical == -Inf] <- 1
+  FDR_empirical <- p.adjust(pval_empirical, method = "BH")
+  
+  # set NAs
+  NAs <- rep(NA, length(names(pval)[-which(names(pval)%in%names(pval_empirical))]))
+  names(NAs) <- names(pval)[-which(names(pval)%in%names(pval_empirical))]
+  
+  pval_empirical <- c(pval_empirical,NAs)
+  FDR_empirical <- c(FDR_empirical,NAs)
+  
+  pval_empirical <- pval_empirical[match(names(pval),names(pval_empirical))]
+  FDR_empirical <- FDR_empirical[match(names(pval),names(FDR_empirical))]
+  
+  DES_empirical <- data.frame(pval,FDR,pval_empirical,FDR_empirical)
+  rownames(DES_empirical) <- rownames(DoubleExpSeq_results[[i]]$All)
+
+  DoubleExpSeq_results_locfdr[[i]] <- DES_empirical
+}
+```
+
+The large number of p-values that are exatly 1 in the DoubleExpSeq results jeopardize using an empirical null to contral the number of false positive discoveries. While the number of significant DTU transcripts is reduced (see below), the results are likely not reliable.
+
+```{r}
+for (i in seq_along(DoubleExpSeq_results)) {
+  print(sum(DoubleExpSeq_results[[i]]$All[,"Adj.pVal"] <0.05,na.rm = T))
+}
+
+print("after locFDR:")
+
+for (i in seq_along(DoubleExpSeq_results_locfdr)) {
+  print(sum(DoubleExpSeq_results_locfdr[[i]]$FDR_empirical <0.05,na.rm = T))
+}
+```
+
+
+
+

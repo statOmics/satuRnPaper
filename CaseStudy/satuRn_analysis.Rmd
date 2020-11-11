@@ -1,18 +1,25 @@
 ---
-title: "Tasic_analysis_L5IT"
+title: "satuRn_analysis"
+author: "Jeroen Gilis"
+date: "11/11/2020"
 output: html_document
 ---
 
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
 # Load libraries
 
-```{r,message=FALSE}
+```{r,message=FALSE,warning=FALSE}
 # for data import
 library(AnnotationHub)
 library(ensembldb)
 library(openxlsx)
 
 # for analysis
-library(qbDTU)
+library(satuRn)
 library(edgeR)
 library(tidyverse)
 library(SummarizedExperiment)
@@ -26,14 +33,9 @@ library(ggplot2)
 ## Import transcript information
 
 ```{r, message=FALSE}
-## Load the annotation resource.
-ah <- AnnotationHub()
-
-## Query for all available EnsDb databases
-all <- query(ah, "EnsDb")
-
-ahEdb <- all[["AH75036"]] #for Mus musculus
-
+ah <- AnnotationHub() # Load the annotation resource.
+all <- query(ah, "EnsDb") # Query for all available EnsDb databases
+ahEdb <- all[["AH75036"]] # for Mus musculus
 txs <- transcripts(ahEdb)
 tx2gene <- as.data.frame(matrix(data = NA, nrow = length(txs), ncol = 2))
 colnames(tx2gene) <- c("TXNAME","GENEID")
@@ -44,25 +46,24 @@ tx2gene$GENEID <- txs$gene_id
 ## Import counts
 
 ```{r}
-quant_sf <- readRDS("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Tasic_case_data/quantsf_counts_L5IT")
-
+Tasic_counts <- readRDS("./Data/Tasic_caseStudy_transcript_counts.Rds")
 # Already remove genes with zero counts in all cells
-quant_sf <- quant_sf[rowSums(quant_sf) != 0,]
-dim(quant_sf)
+Tasic_counts <- Tasic_counts[rowSums(Tasic_counts) != 0,]
+dim(Tasic_counts)
 ```
 
 ## Import metadata
 
 ```{r}
-access <- read.csv2("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Tasic_data/GSE115746_accession_table.csv",sep = "\t")
-access <- access[match(colnames(quant_sf),access$SRA_Run),]
+access <- read.csv2("./Data/Tasic_metadata_2.csv",sep = "\t")
+access <- access[match(colnames(Tasic_counts),access$SRA_Run),]
 
-metaData <- openxlsx::read.xlsx("/Users/jg/Desktop/PhD/DTU_project/single_cell/Tasic/supplementary_tables/Supplementary_Table_10_Full_Metadata.xlsx")
+metaData <- openxlsx::read.xlsx("./Data/Tasic_metadata_1.xlsx")
 metaData <- metaData[match(access$sample_name,metaData$sample_name),]
 
-colnames(quant_sf) <- metaData$sample_name
+colnames(Tasic_counts) <- metaData$sample_name
 metaData <- metaData[metaData$core_intermediate_call == "Core",] # only retain cell that were unambiguously assigned to a certain cell type (cluster)
-quant_sf <- quant_sf[,metaData$sample_name]
+Tasic_counts <- Tasic_counts[,metaData$sample_name]
 metaData <- metaData[,c("sample_name", "brain_region","cluster")]
 ```
 
@@ -74,12 +75,11 @@ txInfo <- tx2gene
 colnames(txInfo) <- c('isoform_id','gene_id')
 rownames(txInfo) <- NULL
 
-rownames(quant_sf) <- sub("\\..*", "", rownames(quant_sf))
-txInfo <- txInfo[txInfo$isoform_id %in% rownames(quant_sf),]
+rownames(Tasic_counts) <- sub("\\..*", "", rownames(Tasic_counts))
+txInfo <- txInfo[txInfo$isoform_id %in% rownames(Tasic_counts),]
 txInfo <- subset(txInfo,duplicated(gene_id) | duplicated(gene_id, fromLast=TRUE))
 
-quant_sf <- quant_sf[which(rownames(quant_sf) %in% txInfo$isoform_id),]
-dim(quant_sf)
+Tasic_counts <- Tasic_counts[which(rownames(Tasic_counts) %in% txInfo$isoform_id),]
 ```
 
 # Set up the experimental design
@@ -94,16 +94,16 @@ remove <- names(table(interaction(metaData$brain_region,metaData$cluster))[table
 metaData <- metaData[-which(metaData$group %in% remove),]
 group <- as.factor(metaData$group)
  
-design_full <- model.matrix(~ 0 + group) # Factorial design
-colnames(design_full) <- levels(group)
+design <- model.matrix(~ 0 + group) # Factorial design
+colnames(design) <- levels(group)
 
-quant_sf <- quant_sf[,which(colnames(quant_sf) %in% metaData$sample_name)]
+Tasic_counts <- Tasic_counts[,which(colnames(Tasic_counts) %in% metaData$sample_name)]
 ```
 
-Gene-level iltering
+# Filtering
 
 ```{r}
-filter_all_edgeR_stringent <- filterByExpr(quant_sf,
+filter_all_edgeR_stringent <- filterByExpr(Tasic_counts,
              design = NULL,
              group = metaData$brain_region,
              lib.size = NULL,
@@ -113,61 +113,56 @@ filter_all_edgeR_stringent <- filterByExpr(quant_sf,
              min.prop = 0.7)
 
 table(filter_all_edgeR_stringent)
-quant_sf <- quant_sf[filter_all_edgeR_stringent,]
-
-dim(quant_sf)
+Tasic_counts <- Tasic_counts[filter_all_edgeR_stringent,]
 ```
 
 ```{r}
 # Update txInfo according to the filtering procedure
-txInfo <- txInfo[which(txInfo$isoform_id %in% rownames(quant_sf)),]
+txInfo <- txInfo[which(txInfo$isoform_id %in% rownames(Tasic_counts)),]
 
 # remove transcripts that are the only isoform expressed of a certain gene (after filtering)
 txInfo <- subset(txInfo,duplicated(gene_id) | duplicated(gene_id, fromLast=TRUE))
 
-quant_sf <- quant_sf[which(rownames(quant_sf) %in% txInfo$isoform_id),]
-dim(quant_sf)
+Tasic_counts <- Tasic_counts[which(rownames(Tasic_counts) %in% txInfo$isoform_id),]
 
-rm(list = setdiff(ls(), c("quant_sf", "txInfo", "design_full", "metaData", "tx2gene","group")))
+# satuRn require the transcripts in the rowData and the transcripts in the count matrix to be in the same order. If not, the resulting models will be matched to the wrong rowData
+txInfo <- txInfo[match(rownames(Tasic_counts),txInfo$isoform_id),]
+
+rm(list = setdiff(ls(), c("Tasic_counts", "txInfo", "design", "metaData", "tx2gene","group")))
 invisible(gc())
-```
-
-```{r}
-# satuRn require the transcripts in the rowData and the transcripts in the count matrix to be in the same order. If not, the resulting models (note that these are named themselves) will be matched to the wrong rowData
-txInfo <- txInfo[match(rownames(quant_sf),txInfo$isoform_id),]
-```
-
-Make a summarized experiment object
-
-```{r, message=F}
-sumExp <- SummarizedExperiment::SummarizedExperiment(assays=list(counts=quant_sf), colData = metaData, rowData = txInfo)
-metadata(sumExp)$formula <- ~ 0 + group  # specify design, internally the fit function will then use design <- model.matrix(sumExp@metadata$formula, colData(sumExp))
 ```
 
 # Analysis
 
-## Fit quasi-binomial models with satuRn
+Make a summarized experiment object
+
+```{r, message=F}
+sumExp <- SummarizedExperiment::SummarizedExperiment(assays=list(counts=Tasic_counts), colData = metaData, rowData = txInfo)
+metadata(sumExp)$formula <- ~ 0 + group  # specify design, internally the fit function will then use design <- model.matrix(sumExp@metadata$formula, colData(sumExp))
+```
+
+## Fit quasi-binomial GLMs with satuRn
 
 ```{r}
 Sys.time()
-sumExp <- qbDTU::fitQB(object = sumExp,
-                       speed = FALSE,
+sumExp <- satuRn::fitQB(object = sumExp,
                        parallel = TRUE,
                        BPPARAM = BiocParallel::bpparam(),
-                       verbose = TRUE
+                       verbose = TRUE,
+                       robustdisp = FALSE
                       )
 Sys.time()
 ```
 
-## set up contrast matrix
+## Set up contrast matrix
 
 ```{r}
 # We here manually construct the contrast of interest as defined by Tasic et al.
-design_full <- model.matrix(~0+group)
-colnames(design_full) <- levels(group)
+design <- model.matrix(~0+group)
+colnames(design) <- levels(group)
 
-L <- matrix(0, ncol = 8, nrow = ncol(design_full))
-rownames(L) <- colnames(design_full)
+L <- matrix(0, ncol = 8, nrow = ncol(design))
+rownames(L) <- colnames(design)
 colnames(L) <- c("C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8")
 
 L[c("VISp.L5_IT_VISp_Batf3", "ALM.L5_IT_ALM_Cpa6_Gpr88"), 1] <- c(1,-1)
@@ -183,7 +178,7 @@ L[c("VISp.L5_IT_VISp_Whrn_Tox2", "ALM.L5_IT_ALM_Tmem163_Arhgap25"), 8] <- c(1,-1
 ## Test contrasts with satuRn
 
 ```{r}
-sumExp <- qbDTU::topTable(object = sumExp, contrasts = L, plot=T, sort = F)
+sumExp <- satuRn::topTable(object = sumExp, contrasts = L, plot=T, sort = F)
 ```
 
 ```{r}
@@ -191,7 +186,7 @@ sumExp <- qbDTU::topTable(object = sumExp, contrasts = L, plot=T, sort = F)
 rowData(sumExp)[["fitQBResult_C6"]]
 ```
 
-## Visualize DTU with satuRn
+# Visualize DTU with satuRn
 
 To create panels A, B and C of Figure 6 of our paper.
 
@@ -199,76 +194,54 @@ To create panels A, B and C of Figure 6 of our paper.
 group1 <- rownames(colData(sumExp))[colData(sumExp)$group == "VISp.L5_IT_VISp_Hsd11b1_Endou"]
 group2 <- rownames(colData(sumExp))[colData(sumExp)$group == "ALM.L5_IT_ALM_Tnc"]
 
-plots <- qbDTU::plotDTU(object = sumExp, contrast = "C6", groups = list(group1,group2), coefficients = list(c(0,0,0,0,0,0,0,0,0,0,0,0,1,0),c(0,0,0,0,0,0,0,0,1,0,0,0,0,0)), summaryStat = "model", transcripts = c("ENSMUST00000081554","ENSMUST00000195963","ENSMUST00000132062"),genes = NULL,top.n = 6)
+plots <- satuRn::plotDTU(object = sumExp, contrast = "C6", groups = list(group1,group2), coefficients = list(c(0,0,0,0,0,0,0,0,0,0,0,0,1,0),c(0,0,0,0,0,0,0,0,1,0,0,0,0,0)), summaryStat = "model", transcripts = c("ENSMUST00000081554","ENSMUST00000195963","ENSMUST00000132062"),genes = NULL,top.n = 6)
 
 # to have same layout as in our paper
 for (i in seq_along(plots)) {
-  current_plot <- plots[[i]]  + 
-  scale_fill_manual(labels = c("VISp","ALM"), values=c("royalblue4", "firebrick")) +
-  scale_x_discrete(labels= c("Hsd11b1_Endou","Tnc"))
+    titles <- c("Figure6A","Figure6B","Figure6C")
+    current_plot <- plots[[i]]  + 
+    scale_fill_manual(labels = c("VISp","ALM"), values=c("royalblue4", "firebrick")) +
+    scale_x_discrete(labels= c("Hsd11b1_Endou","Tnc"))
   
-  # png(paste0("CaseStudy_results/",current_plot$data$variable[1],"_DTU.png"),
-  #   width     = 5,
-  #   height    = 5,
-  #   units     = "in",
-  #   res       = 200,
-  #   pointsize = 4)
-  print(current_plot)
-  # dev.off()
+    png(paste0("./Results/CaseStudy/",titles[i],".png"),
+        width     = 5,
+        height    = 5,
+        units     = "in",
+        res       = 200,
+        pointsize = 4)
+    print(current_plot)
+    dev.off()
 }
 ```
 
-```{r}
-plots <- qbDTU::plotDTU(object = sumExp, contrast = "C6", groups = list(group1,group2), coefficients = list(c(0,0,0,0,0,0,0,0,0,0,0,0,1,0),c(0,0,0,0,0,0,0,0,1,0,0,0,0,0)), summaryStat = "model", transcripts = "ENSMUST00000081554",genes = NULL,top.n = 6)
-
-current_plot <- plots[[1]]  + 
-  scale_fill_manual(labels = c("VISp","ALM"), values=c("royalblue4", "firebrick")) +
-  scale_x_discrete(labels= c("Hsd11b1_Endou","Tnc")) +
-   theme(axis.text.x = element_text(angle = 0, 
-            vjust = 1, hjust = 0.5, size = 8)) +
-  ggtitle("Isoform 2 - ENSMUST00000081554")
-  
-  
-png("isoform1_DTU.png",
-    width     = 5,
-    height    = 5,
-    units     = "in",
-    res       = 200,
-    pointsize = 4)
-print(current_plot)
-dev.off()
-```
-
-
 # GSEA
 
-Save DTU transcripts for contrasts 5, 6 and 7 to perform a DTU analysis (MSigDB)
+Save DTU transcripts for contrasts 5, 6 and 7 to perform a DTU analysis (import to MSigDB)
 
 ```{r}
 DTU_tx <-  rownames(rowData(sumExp)[[5+3]][rowData(sumExp)[[5+3]]$empirical_FDR <= 0.05 & !is.na(rowData(sumExp)[[5+3]]$estimates),])
 DTU_gene <- tx2gene[which(tx2gene$TXNAME %in% DTU_tx), "GENEID"]
-sink(file = "GSEA/Tasic_L5IT_contrast5_DTU_satuRn.txt")
+sink(file = "./Results/CaseStudy/GSEA/Tasic_L5IT_contrast5_DTU_satuRn.txt")
 cat(DTU_gene, "\n")
 sink()
 
 DTU_tx <-  rownames(rowData(sumExp)[[6+3]][rowData(sumExp)[[6+3]]$empirical_FDR <= 0.05 & !is.na(rowData(sumExp)[[6+3]]$estimates),])
 DTU_gene <- tx2gene[which(tx2gene$TXNAME %in% DTU_tx), "GENEID"]
-sink(file = "GSEA/Tasic_L5IT_contrast6_DTU_satuRn.txt")
+sink(file = "./Results/CaseStudy/GSEA/Tasic_L5IT_contrast6_DTU_satuRn.txt")
 cat(DTU_gene, "\n")
 sink()
 
 DTU_tx <-  rownames(rowData(sumExp)[[7+3]][rowData(sumExp)[[7+3]]$empirical_FDR <= 0.05 & !is.na(rowData(sumExp)[[7+3]]$estimates),])
 DTU_gene <- tx2gene[which(tx2gene$TXNAME %in% DTU_tx), "GENEID"]
-sink(file = "GSEA/Tasic_L5IT_contrast7_DTU_satuRn.txt")
+sink(file = "./Results/CaseStudy/GSEA/Tasic_L5IT_contrast7_DTU_satuRn.txt")
 cat(DTU_gene, "\n")
 sink()
 ```
 
 # Save final object
 
-Save resulting object for later comparison of results with limma
+Save resulting object for later comparison of results with limma diffsplice and DoubleExpSeq
 
 ```{r}
-#saveRDS(sumExp, "sumExp.Rds")
-sumExp <- readRDS(file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Case_study_L5It/sumExp.Rds")
+saveRDS(sumExp, file = "./Data/Tasic_caseStudy_satuRn.Rds")
 ```

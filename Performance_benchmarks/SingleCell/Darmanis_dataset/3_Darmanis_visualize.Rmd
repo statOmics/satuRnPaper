@@ -1,64 +1,64 @@
 ---
-title: "Darmanis_visualize_2"
+title: "3_Darmanis_visualize"
+author: "Jeroen Gilis"
+date: "05/11/2020"
 output: html_document
 ---
 
-```{r,message=FALSE}
+**In order to run this script (3_Darmanis_visualize.Rmd), the datasets 02_Darmanis_benchmark_datasets_count.Rdata and 03_Darmanis_DTU_results_count.Rdata are required.** These files can either be generated with the 1_Darmanis_prepare.Rmd and 2_Darmanis_DTU.Rmd scripts, respectively, or downloaded from Zenodo  and put in the data folder of this GitHub repository.
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+# Load libraries
+
+```{r,message=FALSE,warning=FALSE}
 library(tidyverse)
 library(iCOBRA)
 ```
 
-Load truth file
+# Load truth file
 
 ```{r}
-### Load and concatenate data
-if(TRUE) {
+load(file="./Data/02_Darmanis_benchmark_datasets_count.Rdata")
+#load(file="./Data/02_Darmanis_benchmark_datasets_scaledTPM.Rdata")
 
-    load(file='01_Darmanis_benchmark_data_count.Rdata')
-    #load(file="01_Darmanis_benchmark_data_scaledTPM.Rdata")
-  
-    ### Concatenate
-    metaInfo <- c(
-        DarmanisBenchmarkLenient,DarmanisBenchmarkStringent
-    )
+metaInfo <- c(DarmanisBenchmarkLenient,DarmanisBenchmarkStringent)
 
-    rm(DarmanisBenchmarkLenient,DarmanisBenchmarkStringent)
-    invisible(gc()) 
-}
+rm(DarmanisBenchmarkLenient,DarmanisBenchmarkStringent)
 ```
 
-Load DTU performance data
+# Load DTU performance results
 
 ```{r}
-if(TRUE) {
-    load(file='02_Darmanis_DTU_analysis_count.Rdata')
-    #load(file="02_Darmanis_DTU_analysis_scaledTPM.Rdata")  
-  
-    DarmanisBenchmark <- c(
-        DarmanisDtuBenchmark_quasiBinomial,
-        DarmanisDtuBenchmark_limmaDiffsplice,
-        DarmanisDtuBenchmark_DEXSeq,
-        DarmanisDtuBenchmark_DRIMSeq,
-        DarmanisDtuBenchmark_edgeRdiffsplice,
-        DarmanisDtuBenchmark_DoubleExpSeq
-    )
-    
-    ### Remove empty enteries (due to not tested - aka to many samples for reasonable runtime)
-    DarmanisBenchmark  <- DarmanisBenchmark[which(
-        sapply(DarmanisBenchmark, function(x) ! is.null(x$dtuAnalysis))
-    )]
-    
-    rm(DarmanisDtuBenchmark_quasiBinomial,
-        DarmanisDtuBenchmark_limmaDiffsplice,
-        DarmanisDtuBenchmark_DEXSeq,
-        DarmanisDtuBenchmark_DRIMSeq,
-        DarmanisDtuBenchmark_edgeRdiffsplice,
-        DarmanisDtuBenchmark_DoubleExpSeq)
-    invisible(gc())
-}
+load(file="./Data/03_Darmanis_DTU_results_count.Rdata")
+#load(file="./Data/03_Darmanis_DTU_results_scaledTPM.Rdata")  
+
+DarmanisBenchmark <- c(
+    DarmanisDtuBenchmark_satuRn,
+    DarmanisDtuBenchmark_limmaDiffsplice,
+    DarmanisDtuBenchmark_DEXSeq,
+    DarmanisDtuBenchmark_DRIMSeq,
+    DarmanisDtuBenchmark_edgeRdiffsplice,
+    DarmanisDtuBenchmark_DoubleExpSeq)
+
+### Remove empty entries (due to not tested - aka to many samples for reasonable runtime)
+DarmanisBenchmark  <- DarmanisBenchmark[which(
+    sapply(DarmanisBenchmark, function(x) ! is.null(x$dtuAnalysis)))]
+
+rm(DarmanisDtuBenchmark_satuRn,
+    DarmanisDtuBenchmark_limmaDiffsplice,
+    DarmanisDtuBenchmark_DEXSeq,
+    DarmanisDtuBenchmark_DRIMSeq,
+    DarmanisDtuBenchmark_edgeRdiffsplice,
+    DarmanisDtuBenchmark_DoubleExpSeq)
+invisible(gc())
 ```
 
-Helper function 1 --> get pvalues for the different methods on the different datasets
+# Helper function 
+To get pvalues for the different methods on the different datasets
 
 ```{r}
 get_pvalues <- function(dataset,nrep,nmethods) {
@@ -92,15 +92,15 @@ get_pvalues <- function(dataset,nrep,nmethods) {
   pvalues <- pvalues[order(rownames(pvalues)),]
   
   if(nmethods == 6){
-    colnames(pvalues) <- c("quasiBinomial", "limma_diffsplice", "DEXSeq", "DRIMSeq","edgeR_diffsplice", "DoubleExpSeq")
+    colnames(pvalues) <- c("satuRn", "limma_diffsplice", "DEXSeq", "DRIMSeq","edgeR_diffsplice", "DoubleExpSeq")
   } else {
-    colnames(pvalues) <- c("quasiBinomial", "limma_diffsplice","edgeR_diffsplice", "DoubleExpSeq")
+    colnames(pvalues) <- c("satuRn", "limma_diffsplice","edgeR_diffsplice", "DoubleExpSeq")
   }
   return(pvalues)
 }
 ```
 
-Analysis for all datasets for which we have four methods (sample sizes 5, 10 and 20, all reps, both filterings)
+# Visualization function
 
 ```{r}
 visualize_datasets <- function(dataset,metaInfo,nFilters,nSampleSizes,nRep,nmethods,selection,selection2) {
@@ -191,17 +191,19 @@ visualize_datasets <- function(dataset,metaInfo,nFilters,nSampleSizes,nRep,nmeth
             axis.title.x = element_text(size = 10),
             axis.title.y = element_text(size = 10))
 
-        # png(paste("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Results/Darmanis_benchmark/plot_icobra_count", selection2[j], "_", sub("^[^f]*", "", selection[j]), ".png", sep = ""),
-        #     width     = 5.5,
-        #     height    = 4.5,
-        #     units     = "in",
-        #     res       = 200,
-        #     pointsize = 4) # start export
+      png(paste("./Performance_benchmarks/SingleCell/Darmanis_dataset/Results/FDRTPR_", selection2[j], "_", sub("^[^f]*", "", selection[j]), "_count.png", sep = ""),
+            width     = 5.5,
+            height    = 4.5,
+            units     = "in",
+            res       = 200,
+            pointsize = 4) # start export
       print(plot)
-      # dev.off()
+      dev.off()
   }
 }
 ```
+
+# Generate FDR-TPR curves
 
 ```{r}
 selection <- c("20_rep_._filterLenient","20_rep_._filterStringent")

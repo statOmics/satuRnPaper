@@ -60,6 +60,7 @@ tx2gene$GENEID <- txs$gene_id
 ```{r}
 library(tximport)
 quantsf <- tximport(files, type = "salmon", tx2gene = tx2gene, ignoreTxVersion = TRUE, countsFromAbundance = "no", txOut = TRUE)
+#quantsf <- tximport(files, type = "salmon", tx2gene = tx2gene, ignoreTxVersion = TRUE, countsFromAbundance = "scaledTPM", txOut = TRUE)
 ```
 
 ```{r}
@@ -68,7 +69,12 @@ sum(quantsf$counts==0)/(sum(quantsf$counts==0)+sum(quantsf$counts!=0))
 ```
 
 ```{r}
-saveRDS(quantsf$counts, file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Tasic_data/quantsf_counts")
+colnames(quantsf$counts) <- unname(substring(files, 62,71))
+```
+
+```{r}
+saveRDS(quantsf$counts, file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Tasic_data/Tasic_counts.Rds")
+#saveRDS(quantsf$counts, file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Tasic_data/Tasic_scaledTPM.Rds")
 ```
 
 

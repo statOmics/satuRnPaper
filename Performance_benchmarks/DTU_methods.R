@@ -1,15 +1,5 @@
 # Load all 7 DTU methods
 
-### load libraries
-library(edgeR)
-library(limma)
-library(DEXSeq)
-library(DRIMSeq)
-library(DoubleExpSeq)
-library(NBSplice)
-#devtools::install_local("/Users/jg/Desktop/PhD/DTU_project/satuRn", force = TRUE, quiet = FALSE)
-library(satuRn)
-
 satuRn_DTU <- function(countData, tx2gene, sampleData, quiet = FALSE){
     
     colnames(tx2gene)[1:2] <- c("isoform_id", "gene_id")
@@ -21,7 +11,6 @@ satuRn_DTU <- function(countData, tx2gene, sampleData, quiet = FALSE){
     metadata(sumExp)$formula <- ~0+group
     
     sumExp <- satuRn::fitQB(sumExp,
-                            speed = FALSE,
                             parallel = TRUE,
                             BPPARAM = BiocParallel::bpparam(),
                             verbose = TRUE
@@ -144,6 +133,8 @@ edgeR_diffsplice_DTU <- function(countData, tx2gene, sampleData) {
     
     y <- estimateDisp(y, design = design)
     fit <- glmFit(y, design = design) ## glmQLfit --> very poor results
+    
+    tx2gene <- tx2gene[match(rownames(fit$counts), tx2gene$TXNAME),]
     
     dtuEdgeR <- edgeR::diffSpliceDGE(
       glmfit = fit,
@@ -272,10 +263,13 @@ NBSplice_DTU <- function(countData, tx2gene, sampleData,quiet=FALSE) {
     countData <- round(countData)
     
     myIsoDataSet <- IsoDataSet(countData, sampleData, colName, geneIso)
-    myDSResults <- suppressWarnings(NBTest(myIsoDataSet, colName, test="F")) ## other option is chisq
+    
+    myDSResults <- NBTest(myIsoDataSet, colName, test="F")
+    
+
     localRes <- myDSResults@results
     localRes <- localRes[,c(1,2,7)]
     colnames(localRes) <- c("TXNAME", "GENEID", "p_value")
-    
+      
     return(localRes)
 }

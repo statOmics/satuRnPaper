@@ -1,27 +1,31 @@
 ---
-title: "Gtex_visualize_filter"
+title: "3_Gtex_visualize"
+author: "Jeroen Gilis"
+date: "02/11/2020"
 output: html_document
 ---
 
-```{r,message=FALSE}
+**In order to run this script (3_Gtex_visualize.Rmd), the datasets 02_GTEx_benchmark_datasets_count.Rdata and 03_GTEx_DTU_results_count.Rdata are required.** These files can either be generated with the 1_Gtex_prepare.Rmd and 2_Gtex_DTU.Rmd scripts or downloaded from Zenodo. 
+
+The results of this script (FDR-TPR curves) arealready available from our GitHub, under the directory satuRn_paper/Performance_benchmarks/Bulk_Gtex/Results/.
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+```{r,message=FALSE,warning=FALSE}
 library(tidyverse)
 library(iCOBRA)
 ```
 
-# Load datasets (contain ground truth)
+# Load benchmark datasets (contains the ground truth)
 
 As generated in script 1_Gtex_prepare.Rmd
 
 ```{r}
-err <- try(library("here", character.only = TRUE), silent = TRUE)
-if (class(err) == 'try-error') {
-    install.packages("here", repos = "https://cloud.r-project.org")
-    library("here", character.only = TRUE)
-}
-wd <- here()
-
 ### Load and concatenate data
-load(file=paste0(wd,'/Data/Gtex_workingData/02_GTEx_benchmark_datasets_count.Rdata'))
+load(file="./Data/02_GTEx_benchmark_datasets_count.Rdata")
 #load(file="01_gtex_benchmark_data_2017_scaledTPM.Rdata") # TPM equivalent
 metaInfo <- c(gtexBenchmarkDataLenient,gtexBenchmarkDataStringent)
 rm(gtexBenchmarkDataLenient,gtexBenchmarkDataStringent)
@@ -33,7 +37,7 @@ invisible(gc())
 As generated in script 2_Gtex_DTU.Rmd
 
 ```{r}
-load(file=paste0(wd,'/Data/Gtex_workingData/03_GTEx_DTU_results_count.Rdata'))
+load(file="./Data/03_GTEx_DTU_results_count.Rdata")
 #load(file="02_Gtex_DTU_analysis_2017_scaledTPM_full.Rdata") # TPM equivalent
 
 gtexBenchmark <- c(
@@ -46,7 +50,7 @@ gtexBenchmark <- c(
     gtexDtuBenchmark_satuRn
 )
 
-### Remove empty enteries (due to not tested - aka too many samples for reasonable runtime)
+### Remove empty enteries (due to not tested due to too many samples for reasonable runtime)
 gtexBenchmark  <- gtexBenchmark[which(
     sapply(gtexBenchmark, function(x) ! is.null(x$dtuAnalysis))
 )]
@@ -103,7 +107,6 @@ get_pvalues <- function(dataset,nrep,nmethods) {
 
 ```{r}
 visualize_datasets <- function(dataset,metaInfo,nFilters,nSampleSizes,methods,colors,titles,selection) {
-
     nPlots <- nFilters * nSampleSizes
     print(paste("This function will generate",  nPlots, "plots"))
   
@@ -111,7 +114,6 @@ visualize_datasets <- function(dataset,metaInfo,nFilters,nSampleSizes,methods,co
     for (j in 1:nPlots) {
         
         print(j) # print progress
-        
         gtexBenchmark_current_outer <- dataset[grepl(selection[j], names(dataset))] # select the requested analyses
         
         selected_methods <- c()
@@ -171,10 +173,9 @@ visualize_datasets <- function(dataset,metaInfo,nFilters,nSampleSizes,methods,co
         new_col <- c(rep(c(new_col, "#999999"),4),rep("white",2*(length(methods)+1)))
         names(new_col) <- names(cobraplot@plotcolors)
         cobraplot@plotcolors <- new_col
-        # 
-        # # create plot
+
+        # create plot
         plot <- plot_fdrtprcurve(cobraplot, xaxisrange = c(0, 0.4), yaxisrange = c(0,1))
-        # # customize plot
         plot <- plot +
             ggtitle(titles[j]) +
             theme(strip.background = element_blank(),
@@ -186,14 +187,14 @@ visualize_datasets <- function(dataset,metaInfo,nFilters,nSampleSizes,methods,co
             axis.title.y = element_text(size = 10))
         
         # save plot
-        # png(paste0(wd,"/Results/Gtex_benchmark/FDRTPR_count_", gsub(" ", "_", titles[j]), ".png"),
-        # width     = 5.5,
-        # height    = 4.5,
-        # units     = "in",
-        # res       = 200,
-        # pointsize = 4) # start export
+        png(paste0("./Performance_benchmarks/Bulk_Gtex/Results/FDRTPR_", gsub(" ", "_", titles[j]), ".png"),
+        width     = 5.5,
+        height    = 4.5,
+        units     = "in",
+        res       = 200,
+        pointsize = 4) # start export
         print(plot)
-        # dev.off()
+        dev.off()
   }
 }
 ```
@@ -204,9 +205,9 @@ visualize_datasets <- function(dataset,metaInfo,nFilters,nSampleSizes,methods,co
 selection <- c("5_rep_.(_|0_)filterLenient","20_rep_.(_|0_)filterLenient","5_rep_.(_|0_)filterStringent","20_rep_.(_|0_)filterStringent")
 
 colors<- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "black")
-names(colors) <- c("DEXSeq","DoubleExpSeq","DRIMSeq","edgeR_diffsplice", "limma_diffsplice" ,"NBSplice","quasiBinomial")
+names(colors) <- c("DEXSeq","DoubleExpSeq","DRIMSeq","edgeR_diffsplice", "limma_diffsplice" ,"NBSplice","satuRn")
 
-methods <- c("DEXSeq","DoubleExpSeq","DRIMSeq","edgeR_diffsplice", "limma_diffsplice" ,"NBSplice","quasiBinomial")
+methods <- c("DEXSeq","DoubleExpSeq","DRIMSeq","edgeR_diffsplice", "limma_diffsplice" ,"NBSplice","satuRn")
 
 titles <- c("5 versus 5 - edgeR filter - count","20 versus 20 - edgeR filter - count","5 versus 5 - DRIMSeq filter - count","20 versus 20 - DRIMSeq filter - count")
 
@@ -222,9 +223,9 @@ visualize_datasets(dataset=gtexBenchmark,
 selection <- c("50_rep_.(_|0_)filterLenient","50_rep_.(_|0_)filterStringent")
 
 colors<- c("#56B4E9", "#F0E442", "#0072B2", "black")
-names(colors) <- c("DoubleExpSeq","edgeR_diffsplice", "limma_diffsplice","quasiBinomial")
+names(colors) <- c("DoubleExpSeq","edgeR_diffsplice", "limma_diffsplice","satuRn")
 
-methods <- c("DoubleExpSeq","edgeR_diffsplice", "limma_diffsplice","quasiBinomial")
+methods <- c("DoubleExpSeq","edgeR_diffsplice", "limma_diffsplice","satuRn")
 
 titles <- c("50 versus 50 - edgeR filter - count","50 versus 50 - DRIMSeq filter - count")
 

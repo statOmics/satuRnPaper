@@ -1,24 +1,39 @@
 ---
-title: "Gtex_DTU_filter"
+title: "2_Gtex_DTU"
+author: "Jeroen Gilis"
+date: "02/11/2020"
 output: html_document
 ---
 
-# Load all 7 DTU methods
+**In order to run this script (2_Gtex_DTU.Rmd), the dataset 02_GTEx_benchmark_datasets_count.Rdata is required.** This file can either be generated with the 1_Gtex_prepare.Rmd script or downloaded from Zenodo.  
 
-In stead, source the DTU_methods.R script
+Run the DTU analyses for all 7 methods on all (18) Gtex benchmark datasets. Note that for DEXSeq, DRIMSeq and NBSplice we only run the datasets with 5 samples in each group, as these methods do not scale to large datasets.
+This code runs approximately 4 hours on a MacBook Pro 2018, processor; 2,3 GHz Quad-Core Intel Core i5, 16GB RAM. Most of the runtime is attributed to the DEXSeq, DRIMSeq and NBSplice analyses.
+Most of the runtime is attributed to the DEXSeq, DRIMSeq and NBSplice analyses.
 
-```{r}
-err <- try(library("here", character.only = TRUE), silent = TRUE)
-if (class(err) == 'try-error') {
-    install.packages("here", repos = "https://cloud.r-project.org")
-    library("here", character.only = TRUE)
-}
-wd <- here()
-
-source(file=paste0(wd,"/Performance_benchmarks/DTU_methods.R"))
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 ```
 
-# Set up parralel execution
+# Load DTU methods
+
+Source file that allows running all seven DTU methods that were assessed in this paper: satuRn, DoubleExpSeq, limma diffsplice, edgeRdiffsplice, DEXSeq, DRIMseq and NBSplice.
+
+```{r, message=FALSE, warning=FALSE}
+### load libraries
+library(edgeR)
+library(limma)
+library(DEXSeq)
+library(DRIMSeq)
+library(DoubleExpSeq)
+library(NBSplice)
+library(satuRn)
+
+source(file="./Performance_benchmarks/DTU_methods.R")
+```
+
+# Set up parallel execution
 
 ```{r}
 if(TRUE) {
@@ -37,25 +52,19 @@ if(TRUE) {
 }
 ```
 
-# Run the analysis 
+# Run all analyses 
 
-For all 9 methods on all (24) Gtex benchmark datasets
-This code runs about ... on my laptop (MacBook Pro 2018, processor; 2,3 GHz Quad-Core Intel Core i5, 16GB RAM)
+Run the DTU analyses for all 7 methods on all (18) Gtex benchmark datasets. Note that for DEXSeq, DRIMSeq and NBSplice we only run the datasets with 5 samples in each group, as these methods do not scale to large datasets.
+This code runs approximately 4 hours on a MacBook Pro 2018, processor; 2,3 GHz Quad-Core Intel Core i5, 16GB RAM. Most of the runtime is attributed to the DEXSeq, DRIMSeq and NBSplice analyses.
 
 ```{r}
 ### Load the benchmark datasets, which are output from 1_Gtex_prepare.Rmd
-load(file=paste0(wd,'/Data/Gtex_workingData/02_GTEx_benchmark_datasets_count.Rdata'))
+load(file="./Data/02_GTEx_benchmark_datasets_count.Rdata")
 #load(file="/Users/jg/Desktop/paper_Data/Gtex_workingData/02_GTEx_benchmark_datasets_count.Rdata")
 
-### Wrangle benchmark data
-names(gtexBenchmarkDataLenient)   <- paste0(names(gtexBenchmarkDataLenient)  , '_filterLenient')
-names(gtexBenchmarkDataStringent) <- paste0(names(gtexBenchmarkDataStringent), '_filterStringent')
+gtexBenchmarkData <- c(gtexBenchmarkDataLenient,gtexBenchmarkDataStringent)
 
-gtexBenchmarkData <- c(
-    gtexBenchmarkDataLenient,
-    gtexBenchmarkDataStringent)
-
-### Run DTU analysis on benchmark data
+### Run DTU analyses on benchmark data
     
 print("start satuRn")
 
@@ -202,7 +211,7 @@ gtexDtuBenchmark_DEXSeq <- plyr::llply(
     .inform = TRUE,
     .fun = function(localData) {
             
-        if(ncol(localData$data) > 10) {
+        if(ncol(localData$data) > 40) {
             return(NULL) # do not run DEXSeq for datasets with many samples - too slow
         }
           
@@ -241,7 +250,7 @@ gtexDtuBenchmark_DRIMSeq <- plyr::llply(
     .inform = TRUE,
     .fun = function(localData) {
           
-        if(ncol(localData$data) > 10) {
+        if(ncol(localData$data) > 40) {
             return(NULL) # do not run DRIMSeq for datasets with many samples - too slow
         }
           
@@ -281,7 +290,7 @@ gtexDtuBenchmark_NBSplice <- plyr::llply(
     .inform = TRUE,
     .fun = function(localData) {
           
-        if(ncol(localData$data) > 10) {
+        if(ncol(localData$data) > 40) {
               return(NULL) # do not run NBSPlice for datasets with many samples - too slow
         }
           
@@ -294,6 +303,15 @@ gtexDtuBenchmark_NBSplice <- plyr::llply(
             quiet=FALSE
         )
         testTime <- as.numeric(difftime(Sys.time(), t0, units = 'secs') )
+        
+        if(is.null(localRes)){
+            return(
+            list(
+                dtuAnalysis = localRes,
+                runtime = testTime
+            )
+        )
+        }
 
         ### Massage
         localRes$gene_modified <- localData$metaInfo$gene_modified[match(
@@ -328,7 +346,7 @@ save(gtexDtuBenchmark_satuRn,
     gtexDtuBenchmark_DEXSeq,
     gtexDtuBenchmark_DRIMSeq,
     gtexDtuBenchmark_NBSplice,
-    file=paste0(wd,'/Data/Gtex_workingData/03_GTEx_DTU_results_count.Rdata'))
+    file="./Data/03_GTEx_DTU_results_count.Rdata")
 ```
 
 

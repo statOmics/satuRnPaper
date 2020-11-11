@@ -1,0 +1,192 @@
+---
+title: "DoubleExpSeq_analysis"
+author: "Jeroen Gilis"
+date: "11/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+# Load libraries
+
+```{r,message=FALSE}
+## for data import
+library(AnnotationHub)
+library(ensembldb)
+library(openxlsx)
+
+## for analysis
+library(edgeR)
+library(tidyverse)
+library(DoubleExpSeq)
+library(SummarizedExperiment)
+
+## for visualization
+library(ggplot2)
+```
+
+# Data import
+
+## Import transcript information
+
+```{r, message=FALSE}
+ah <- AnnotationHub() # Load the annotation resource.
+all <- query(ah, "EnsDb") # Query for all available EnsDb databases
+ahEdb <- all[["AH75036"]] # for Mus musculus
+
+txs <- transcripts(ahEdb)
+tx2gene <- as.data.frame(matrix(data = NA, nrow = length(txs), ncol = 2))
+colnames(tx2gene) <- c("TXNAME","GENEID")
+tx2gene$TXNAME <- txs$tx_id
+tx2gene$GENEID <- txs$gene_id
+```
+
+## Import counts
+
+```{r}
+Tasic_counts <- readRDS("./Data/Tasic_caseStudy_transcript_counts.Rds")
+# Already remove genes with zero counts in all cells
+Tasic_counts <- Tasic_counts[rowSums(Tasic_counts) != 0,]
+dim(Tasic_counts)
+```
+
+## Import metadata
+
+```{r}
+access <- read.csv2("./Data/Tasic_metadata_2.csv",sep = "\t")
+access <- access[match(colnames(Tasic_counts),access$SRA_Run),]
+
+metaData <- openxlsx::read.xlsx("./Data/Tasic_metadata_1.xlsx")
+metaData <- metaData[match(access$sample_name,metaData$sample_name),]
+
+colnames(Tasic_counts) <- metaData$sample_name
+metaData <- metaData[metaData$core_intermediate_call == "Core",] # only retain cell that were unambiguously assigned to a certain cell type (cluster)
+Tasic_counts <- Tasic_counts[,metaData$sample_name]
+metaData <- metaData[,c("sample_name", "brain_region","cluster")]
+```
+
+# Data wrangling
+
+```{r}
+# Remove transcripts that are the only isoform expressed of a certain gene
+txInfo <- tx2gene
+colnames(txInfo) <- c('isoform_id','gene_id')
+rownames(txInfo) <- NULL
+
+rownames(Tasic_counts) <- sub("\\..*", "", rownames(Tasic_counts))
+txInfo <- txInfo[txInfo$isoform_id %in% rownames(Tasic_counts),]
+txInfo <- subset(txInfo,duplicated(gene_id) | duplicated(gene_id, fromLast=TRUE))
+
+Tasic_counts <- Tasic_counts[which(rownames(Tasic_counts) %in% txInfo$isoform_id),]
+```
+
+# Set up the experimental design
+
+```{r}
+metaData$cluster <- gsub(" ", "_", metaData$cluster)
+metaData$group <- paste(metaData$brain_region,metaData$cluster,sep=".")
+
+# Remove groups (cell types) with less than 30 cells --> removes 4 groups
+remove <- names(table(interaction(metaData$brain_region,metaData$cluster))[table(interaction(metaData$brain_region,metaData$cluster)) < 30])
+
+metaData <- metaData[-which(metaData$group %in% remove),]
+group <- as.factor(metaData$group)
+ 
+design <- model.matrix(~ 0 + group) # Factorial design
+colnames(design) <- levels(group)
+
+Tasic_counts <- Tasic_counts[,which(colnames(Tasic_counts) %in% metaData$sample_name)]
+```
+
+# Filtering
+
+```{r}
+filter_all_edgeR_stringent <- filterByExpr(Tasic_counts,
+             design = NULL,
+             group = metaData$brain_region,
+             lib.size = NULL,
+             min.count = 10,
+             min.total.count = 0,
+             large.n = 0,
+             min.prop = 0.7)
+
+table(filter_all_edgeR_stringent)
+Tasic_counts <- Tasic_counts[filter_all_edgeR_stringent,]
+```
+
+```{r}
+# Update txInfo according to the filtering procedure
+txInfo <- txInfo[which(txInfo$isoform_id %in% rownames(Tasic_counts)),]
+
+# remove transcripts that are the only isoform expressed of a certain gene (after filtering)
+txInfo <- subset(txInfo,duplicated(gene_id) | duplicated(gene_id, fromLast=TRUE))
+
+Tasic_counts <- Tasic_counts[which(rownames(Tasic_counts) %in% txInfo$isoform_id),]
+
+# satuRn require the transcripts in the rowData and the transcripts in the count matrix to be in the same order. If not, the resulting models will be matched to the wrong rowData
+txInfo <- txInfo[match(rownames(Tasic_counts),txInfo$isoform_id),]
+
+rm(list = setdiff(ls(), c("Tasic_counts", "txInfo", "design", "metaData", "tx2gene","group")))
+invisible(gc())
+```
+
+# Analysis
+
+```{r}
+# Get tx2gene in better format
+geneForEachTx <- tx2gene$GENEID[match(rownames(Tasic_counts),tx2gene$TXNAME)]
+groupID <- as.character(geneForEachTx)
+
+## get the "total" counts
+forCycle <- split(1:nrow(Tasic_counts), as.character(groupID))
+totalCount <- lapply(forCycle, function(i) {
+    sct <- Tasic_counts[i, , drop = FALSE]
+    rs <- t(sapply(1:nrow(sct), function(r) colSums(sct[, , drop = FALSE])))
+    rownames(rs) <- rownames(sct)
+    rs
+})
+totalCount <- do.call(rbind, totalCount)
+stopifnot(all(rownames(Tasic_counts) %in% rownames(totalCount)))
+totalCount <- totalCount[rownames(Tasic_counts), ]
+```
+
+In DoubleExpSeq, we need to test all contrasts separately, i.e. fit  the model 9 times since we have 9 contrasts
+
+```{r}
+# Define all contrasts as numeric for DoubleExpSeq
+contrasts <- list(c(4,13),c(5,11),c(6,13),c(6,7),c(1,8),c(1,10),c(1,2),c(3,14))
+
+DES_results <- list()
+
+Sys.time()
+for (i in seq_along(contrasts)) {
+    mDouble <- suppressWarnings(DBGLM1(y = Tasic_counts,
+          m = totalCount,
+          groups = group,
+          shrink.method="WEB",
+          contrast = contrasts[[i]],
+          use.all.groups=TRUE))
+    DES_results[[i]] <- mDouble
+}
+Sys.time()
+```
+
+Display the number of DTU transcripts for each transcript
+
+```{r}
+for (i in seq_along(DES_results)) {
+    print(sum(DES_results[[i]]$All[,"Adj.pVal"] < 0.05,na.rm = T))
+}
+```
+
+# Save final object
+
+Save resulting object for later comparison of results with satuRn
+
+```{r}
+saveRDS(DES_results, "./Data/Tasic_caseStudy_DoubleExpSeq.Rds")
+```
+
