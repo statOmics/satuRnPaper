@@ -47,13 +47,25 @@ To reproduce the results that are displayed in this publication, proceed as foll
 1. Make a local clone of this Github repository
 2. Open the selected R scripts (.Rmd) in the R project "DTU_paper.Rproj" in the root of this repository.
 3. Look at the top of the R scripts what input data is required. Download this data from Zenodo (see Availability of data) and place the data in the `Data`  folder of this repository.
-4. Run the analyses - the results will automatically be stored in the repository, either in the "Data" folder (if it is an intermediate results) or in the Results folder (if it is an end resuls, e.g. a figure.)
+4. Run the analyses - the results will automatically be stored in the repository, either in the `Data` folder (if it is an intermediate results) or in the `Results` folder (if it is an end resuls, e.g. a figure.)
 
 This Github package contains the following folders:
 
-- Data: For reproducing the results displayed in this publication, input data for the different analysis should be downloaded from Zenodo and placed in the Data folder of *your local clone* of this Github page.
+`CaseStudy`: This folder contains all the code for reproducing the case study analyses (analyses with satuRn, limma diffsplice and DoubleExpSeq).
 
-1. Performance_benchmarks: This folder contains all the code
+`Data`: For reproducing the results displayed in this publication, input data for the different analysis should be downloaded from Zenodo and placed in the `Data` folder of **your local clone** of this Github page.
+
+`Performance_benchmarks`: This folder contains all the code for reproducing the performance benchmark analyses.
+
+`Results`:  This folder contains all the resulting figures, including those that were used in this publication and its supplementary materials.
+
+`Scalability_benchmarks`: This folder contains all the code for reproducing the scalability benchmark analyses.
+
+
+
+
+
+
 
 
 
