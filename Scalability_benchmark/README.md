@@ -1,11 +1,7 @@
-# DTU_paper: scalability benchmark
+## Scalability_benchmark folder
 
-Current problems;
-1. initialFiltering.R requires the salmon files (27Gb) --> can be resolved when only providing count matrix after tximport
-2. BANDITS requires ECC files, which are the bulk of the 27Gb of the salmon files --> no solution
+## Current problem: BANDITS requires ECC files, which are the bulk of the 27Gb of the salmon files --> no solution, so either ECCs must be provided in Zenodo or the BANDITS analysis cannot be reproduced. I tink we should upload to Zenodo.
 
-The script initialFiltering.R is the first to run. It generates the required count matrix (quantsf_counts.Rds),
-a file linking transcripts to genes (tx2gene.Rds) and the estimated effective transcripts lenghts (eff_len.Rds).
-The latter file is required to perform a BANDITS analysis.
+- To perform the scalability analyses, the unix executable `runtime` can simply be run from the command line using ./runtime. This runs the analyses on all scalability benchmark data for all DTU methods assessed in this publication.
+- To generate the figures with respect to scalability displayed in this benchmark, run the `scalabilityBenchmark.Rmd` script.
 
-The file

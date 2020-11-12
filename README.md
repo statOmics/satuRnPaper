@@ -21,7 +21,6 @@ We have shown that our novel DTU analysis tool, satuRn:
 (iv) allows for modelling complex experimental designs, 
 (v) can deal with realistic proportions of zero counts and
 (vi) provides direct inference on the biologically relevant transcript level.
-
 To our knowledge, satuRn is the only DTU analysis method that combines all of the above qualities.
 
 **Methods**
