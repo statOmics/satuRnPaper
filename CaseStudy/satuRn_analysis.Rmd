@@ -148,8 +148,7 @@ Sys.time()
 sumExp <- satuRn::fitQB(object = sumExp,
                        parallel = TRUE,
                        BPPARAM = BiocParallel::bpparam(),
-                       verbose = TRUE,
-                       robustdisp = FALSE
+                       verbose = TRUE
                       )
 Sys.time()
 ```

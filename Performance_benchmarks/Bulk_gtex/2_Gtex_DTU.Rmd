@@ -22,33 +22,32 @@ Source file that allows running all seven DTU methods that were assessed in this
 
 ```{r, message=FALSE, warning=FALSE}
 ### load libraries
+library(doMC)
 library(edgeR)
 library(limma)
 library(DEXSeq)
 library(DRIMSeq)
 library(DoubleExpSeq)
 library(NBSplice)
+#devtools::install_local("/Users/jg/Desktop/PhD/DTU_project/satuRn", force = TRUE, quiet = FALSE)
 library(satuRn)
 
 source(file="./Performance_benchmarks/DTU_methods.R")
 ```
 
+
 # Set up parallel execution
 
 ```{r}
-if(TRUE) {
-    nrCores <- 2
+nrCores <- 2
 
-    if(nrCores != 1) {
-        doParallel <- TRUE
-        doProgress <- 'none'
-
-        library(doMC)
-        registerDoMC(cores = nrCores)
-    } else {
-        doParallel <- FALSE
-        doProgress <- 'text'
-    }
+if(nrCores != 1) {
+    doParallel <- TRUE
+    doProgress <- 'none'
+    registerDoMC(cores = nrCores)
+} else {
+    doParallel <- FALSE
+    doProgress <- 'text'
 }
 ```
 
@@ -74,26 +73,18 @@ suppressWarnings(gtexDtuBenchmark_satuRn <- plyr::llply(
     .inform = TRUE,
     .fun = function(localData) {
         ### Perform DTU analysis
-        t0 <- Sys.time()
         localRes <- satuRn_DTU(
             countData  = localData$data,
             tx2gene    = localData$metaInfo,
             sampleData = localData$design
         )
-        testTime <- as.numeric( difftime(Sys.time(), t0, units = 'secs') )
 
         ### Massage
         localRes$gene_modified <- localData$metaInfo$gene_modified[match(
-            localRes$TXNAME, localData$metaInfo$TXNAME
-        )]
+            localRes$TXNAME, localData$metaInfo$TXNAME)]
 
         ### Return result
-        return(
-            list(
-                dtuAnalysis = localRes,
-                runtime = testTime
-            )
-        )
+        return(list(dtuAnalysis = localRes))
     }
 ))
 difftime(Sys.time(), tStart)
@@ -108,27 +99,19 @@ gtexDtuBenchmark_DoubleExpSeq <- plyr::llply(
     .inform = TRUE,
     .fun = function(localData) {
         ### Perform DTU analysis
-        t0 <- Sys.time()
         localRes <- DoubleExpSeq_DTU(
             countData  = localData$data,
             tx2gene    = localData$metaInfo,
             sampleData = localData$design,
             quiet=FALSE
         )
-        testTime <- as.numeric(difftime(Sys.time(), t0, units = 'secs') )
 
         ### Massage
         localRes$gene_modified <- localData$metaInfo$gene_modified[match(
-            localRes$TXNAME, localData$metaInfo$TXNAME
-        )]
+            localRes$TXNAME, localData$metaInfo$TXNAME)]
 
         ### Return result
-        return(
-            list(
-                dtuAnalysis = localRes,
-                runtime = testTime
-            )
-        )
+        return(list(dtuAnalysis = localRes))
     }
 )
 difftime(Sys.time(), tStart)
@@ -143,26 +126,18 @@ gtexDtuBenchmark_limmaDiffsplice <- plyr::llply(
     .inform = TRUE,
     .fun = function(localData) {
         ### Perform DTU analysis
-        t0 <- Sys.time()
         localRes <- limma_diffsplice_DTU(
             countData  = localData$data,
             tx2gene    = localData$metaInfo,
             sampleData = localData$design
         )
-        testTime <- as.numeric( difftime(Sys.time(), t0, units = 'secs') )
 
         ### Massage
         localRes$gene_modified <- localData$metaInfo$gene_modified[match(
-            localRes$TXNAME, localData$metaInfo$TXNAME
-        )]
+            localRes$TXNAME, localData$metaInfo$TXNAME)]
 
         ### Return result
-        return(
-            list(
-                dtuAnalysis = localRes,
-                runtime = testTime
-            )
-        )
+        return(list(dtuAnalysis = localRes))
     }
 )
 difftime(Sys.time(), tStart)
@@ -177,26 +152,18 @@ gtexDtuBenchmark_edgeRdiffsplice <- plyr::llply(
     .inform = TRUE,
     .fun = function(localData) {
         ### Perform DTU analysis
-        t0 <- Sys.time()
         localRes <- edgeR_diffsplice_DTU(
             countData  = localData$data,
             tx2gene    = localData$metaInfo,
             sampleData = localData$design
         )
-        testTime <- as.numeric(difftime(Sys.time(), t0, units = 'secs') )
 
         ### Massage
         localRes$gene_modified <- localData$metaInfo$gene_modified[match(
-            localRes$TXNAME, localData$metaInfo$TXNAME
-        )]
+            localRes$TXNAME, localData$metaInfo$TXNAME)]
 
         ### Return result
-        return(
-            list(
-                dtuAnalysis = localRes,
-                runtime = testTime
-            )
-        )
+        return(list(dtuAnalysis = localRes))
     }
 )
 difftime(Sys.time(), tStart)
@@ -212,30 +179,22 @@ gtexDtuBenchmark_DEXSeq <- plyr::llply(
     .fun = function(localData) {
             
         if(ncol(localData$data) > 40) {
-            return(NULL) # do not run DEXSeq for datasets with many samples - too slow
-        }
+            return(NULL) 
+        } # do not run DEXSeq for datasets with many samples - too slow
           
         ### Perform DTU analysis
-        t0 <- Sys.time()
         localRes <- DEXSeq_DTU(
             countData  = localData$data,
             tx2gene    = localData$metaInfo,
             sampleData = localData$design
         )
-        testTime <- as.numeric(difftime(Sys.time(), t0, units = 'secs') )
 
         ### Massage
         localRes$gene_modified <- localData$metaInfo$gene_modified[match(
-            localRes$TXNAME, localData$metaInfo$TXNAME
-        )]
+            localRes$TXNAME, localData$metaInfo$TXNAME)]
 
         ### Return result
-        return(
-            list(
-                dtuAnalysis = localRes,
-                runtime = testTime
-            )
-        )
+        return(list(dtuAnalysis = localRes))
     }
 )
 difftime(Sys.time(), tStart)
@@ -251,30 +210,22 @@ gtexDtuBenchmark_DRIMSeq <- plyr::llply(
     .fun = function(localData) {
           
         if(ncol(localData$data) > 40) {
-            return(NULL) # do not run DRIMSeq for datasets with many samples - too slow
-        }
+            return(NULL) 
+        } # do not run DRIMSeq for datasets with many samples - too slow
           
         ### Perform DTU analysis
-        t0 <- Sys.time()
         localRes <- DRIMSeq_DTU(
             countData  = localData$data,
             tx2gene    = localData$metaInfo,
             sampleData = localData$design
         )
-        testTime <- as.numeric( difftime(Sys.time(), t0, units = 'secs') )
 
         ### Massage
         localRes$gene_modified <- localData$metaInfo$gene_modified[match(
-            localRes$TXNAME, localData$metaInfo$TXNAME
-        )]
+            localRes$TXNAME, localData$metaInfo$TXNAME)]
 
         ### Return result
-        return(
-            list(
-                dtuAnalysis = localRes,
-                runtime = testTime
-            )
-        )
+        return(list(dtuAnalysis = localRes))
     }
 )
 difftime(Sys.time(), tStart)
@@ -291,40 +242,27 @@ gtexDtuBenchmark_NBSplice <- plyr::llply(
     .fun = function(localData) {
           
         if(ncol(localData$data) > 40) {
-              return(NULL) # do not run NBSPlice for datasets with many samples - too slow
-        }
+              return(NULL) 
+        } # do not run NBSPlice for datasets with many samples - too slow
           
         ### Perform DTU analysis
-        t0 <- Sys.time()
         localRes <- NBSplice_DTU(
             countData  = localData$data,
             tx2gene    = localData$metaInfo,
             sampleData = localData$design,
             quiet=FALSE
         )
-        testTime <- as.numeric(difftime(Sys.time(), t0, units = 'secs') )
-        
+
         if(is.null(localRes)){
-            return(
-            list(
-                dtuAnalysis = localRes,
-                runtime = testTime
-            )
-        )
+            return( list(dtuAnalysis = localRes))
         }
 
         ### Massage
         localRes$gene_modified <- localData$metaInfo$gene_modified[match(
-            localRes$TXNAME, localData$metaInfo$TXNAME
-        )]
+            localRes$TXNAME, localData$metaInfo$TXNAME)]
 
         ### Return result
-        return(
-            list(
-                dtuAnalysis = localRes,
-                runtime = testTime
-            )
-        )
+        return(list(dtuAnalysis = localRes))
     }
 )
 difftime(Sys.time(), tStart)
@@ -348,7 +286,5 @@ save(gtexDtuBenchmark_satuRn,
     gtexDtuBenchmark_NBSplice,
     file="./Data/03_GTEx_DTU_results_count.Rdata")
 ```
-
-
 
 

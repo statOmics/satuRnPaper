@@ -66,8 +66,7 @@ run_satuRn <- function(L,countData,tx2gene) {
         sumExp <- satuRn:::fitQB(object = sumExp,
                                  parallel = FALSE,
                                  BPPARAM = BiocParallel::bpparam(),
-                                 verbose = TRUE,
-                                 robustdisp=FALSE
+                                 verbose = TRUE
         )
         
         L <- matrix(0, ncol = 1, nrow = ncol(design))
