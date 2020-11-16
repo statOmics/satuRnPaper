@@ -108,20 +108,19 @@ png("./Results/caseStudy/Figure6D.png",
     res       = 200,
     pointsize = 4)
 ggplot(plot_data, mapping = aes(x=group,y=counts,fill=brain_region)) +
-  geom_violin() +
-  scale_fill_manual(values=c("royalblue4", "firebrick")) +
-  geom_point(data = plot_data, aes(x=group,y=counts),size=0.6, position = position_jitterdodge(jitter.width = 0.7,jitter.height = 0, dodge.width = 0.9)) +
-  stat_summary(fun=mean, geom="point", position = position_dodge(width = 0.9), shape=18, size=4, colour = "cyan") + 
-  stat_summary(fun=median, geom="point", position = position_dodge(width = 0.9), shape=18, size=3, colour = "green4") +
-  theme_bw() +
-  ggtitle("ENSMUSG00000029470") +
-  facet_wrap(~variable, ncol=1, labeller = labeller(variable = label_facet(plot_data$variable))) +
-  ylab("gene expression count") +
-  xlab("cluster") +
-  theme(plot.title = element_text(size = 9.5,face="bold")) +
-  theme(plot.subtitle = element_text(size = 7)) +
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size=8)) +
-  theme(strip.text = element_text(size = 7,face="bold"))
+    geom_violin() +
+    scale_fill_manual(values=c("royalblue4", "firebrick")) +
+    geom_point(data = plot_data, aes(x=group,y=counts),size=0.6, position = position_jitterdodge(jitter.width = 0.7,jitter.height = 0, dodge.width = 0.9)) +
+    stat_summary(fun=mean, geom="point", position = position_dodge(width = 0.9), shape=18, size=4, colour = "cyan") + 
+    stat_summary(fun=median, geom="point", position = position_dodge(width = 0.9), shape=18, size=3, colour = "green4") +
+    theme_bw() +
+    ggtitle("ENSMUSG00000029470") +
+    facet_wrap(~variable, ncol=1, labeller = labeller(variable = label_facet(plot_data$variable))) +
+    ylab("gene expression count") +
+    xlab("group") +
+    theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=9)) +
+    theme(strip.text = element_text(size = 9,face="bold")) +
+    theme(plot.title = element_text(size = 9.5,face="bold"))
 dev.off()
 
 #plot_data$counts_scaled <- plot_data$counts/y$samples$norm.factors[metaData$group %in% c("ALM.L5_IT_ALM_Tnc","VISp.L5_IT_VISp_Hsd11b1_Endou")]

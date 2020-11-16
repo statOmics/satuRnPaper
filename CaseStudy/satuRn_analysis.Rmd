@@ -195,12 +195,14 @@ group2 <- rownames(colData(sumExp))[colData(sumExp)$group == "ALM.L5_IT_ALM_Tnc"
 
 plots <- satuRn::plotDTU(object = sumExp, contrast = "C6", groups = list(group1,group2), coefficients = list(c(0,0,0,0,0,0,0,0,0,0,0,0,1,0),c(0,0,0,0,0,0,0,0,1,0,0,0,0,0)), summaryStat = "model", transcripts = c("ENSMUST00000081554","ENSMUST00000195963","ENSMUST00000132062"),genes = NULL,top.n = 6)
 
-# to have same layout as in our paper
+# To have same layout as in our paper
 for (i in seq_along(plots)) {
     titles <- c("Figure6A","Figure6B","Figure6C")
     current_plot <- plots[[i]]  + 
     scale_fill_manual(labels = c("VISp","ALM"), values=c("royalblue4", "firebrick")) +
-    scale_x_discrete(labels= c("Hsd11b1_Endou","Tnc"))
+    scale_x_discrete(labels= c("Hsd11b1_Endou","Tnc")) +
+    theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5, size = 9)) + 
+    theme(strip.text = element_text(size = 9, face = "bold"))
   
     png(paste0("./Results/CaseStudy/",titles[i],".png"),
         width     = 5,
@@ -244,3 +246,7 @@ Save resulting object for later comparison of results with limma diffsplice and 
 ```{r}
 saveRDS(sumExp, file = "./Data/Tasic_caseStudy_satuRn.Rds")
 ```
+
+
+
+

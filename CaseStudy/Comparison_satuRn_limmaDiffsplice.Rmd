@@ -97,7 +97,7 @@ gg_data$method <- factor(gg_data$method, levels = c("satuRn","both","limmaDiffsp
 Make plot of gene-level count of the transcripts uniquely identified as DTU by satuRn or limma diffsplice, or by both methods.
 
 ```{r}
-png("./Results/caseStudy/Figure8A.png",
+png("./Results/caseStudy/Figure7A.png",
   width     = 4.5,
   height    = 3.5,
   units     = "in",
@@ -119,7 +119,7 @@ Make plot of the fraction of non-zero counts in the transcripts uniquely identif
 ```{r}
 gg_data$frac_non_zero <- 1-gg_data$frac_zero
 
-png("./Results/caseStudy/Figure8B.png",
+png("./Results/caseStudy/Figure7B.png",
   width     = 4.5,
   height    = 3.5,
   units     = "in",
@@ -165,8 +165,8 @@ label_facet <- function(txID, padj_limma, rank_limma, padj_satuRn, rank_satuRn)
     return(lab)
 }
 
-# plot figure 9A
-png("./Results/caseStudy/Figure9A.png",
+# plot figure 8A
+png("./Results/caseStudy/Figure8A.png",
   width     = 5,
   height    = 5,
   units     = "in",
@@ -176,8 +176,8 @@ plot_9A[[1]] +
   scale_fill_manual(labels = c("ALM","VISp"), values=c("royalblue4", "firebrick")) +
   scale_x_discrete(labels= c("Tnc","Hsd11b1_Endou")) + 
   facet_wrap(~variable, ncol = 1, labeller = labeller(variable = label_facet(factor(transcript), padj_limma, rank_limma, padj_satuRn, rank_satuRn))) + 
-              theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size = 8)) + 
-              theme(strip.text = element_text(size = 7,face = "bold"))
+              theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5, size = 9)) + 
+              theme(strip.text = element_text(size = 8,face = "bold"))
 
 dev.off()
 ```
@@ -201,8 +201,8 @@ rank_limma <- txInfo[txInfo$isoform_id == transcript,"rank_limma"]
 padj_satuRn <- format(rowData(satuRn_results)[["fitQBResult_C6"]][transcript,"empirical_FDR"],digits=4)
 rank_satuRn <- txInfo[txInfo$isoform_id == transcript,"rank_satuRn"]
 
-# plot figure 9B
-png("./Results/caseStudy/Figure9B.png",
+# plot figure 8B
+png("./Results/caseStudy/Figure8B.png",
   width     = 5,
   height    = 5,
   units     = "in",
@@ -212,8 +212,8 @@ plot_9B[[1]] +
   scale_fill_manual(labels = c("ALM","VISp"), values=c("royalblue4", "firebrick")) +
   scale_x_discrete(labels= c("Tnc","Hsd11b1_Endou")) + 
   facet_wrap(~variable, ncol = 1, labeller = labeller(variable = label_facet(factor(transcript), padj_limma, rank_limma, padj_satuRn, rank_satuRn))) + 
-              theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size = 8)) + 
-              theme(strip.text = element_text(size = 7,face = "bold"))
+              theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5, size = 9)) + 
+              theme(strip.text = element_text(size = 8,face = "bold"))
 
 dev.off()
 ```
@@ -237,8 +237,8 @@ rank_limma <- txInfo[txInfo$isoform_id == transcript,"rank_limma"]
 padj_satuRn <- format(rowData(satuRn_results)[["fitQBResult_C6"]][transcript,"empirical_FDR"],digits=4)
 rank_satuRn <- txInfo[txInfo$isoform_id == transcript,"rank_satuRn"]
 
-# plot figure 9C
-png("./Results/caseStudy/Figure9C.png",
+# plot figure 8C
+png("./Results/caseStudy/Figure8C.png",
   width     = 5,
   height    = 5,
   units     = "in",
@@ -248,8 +248,8 @@ plot_9C[[1]] +
   scale_fill_manual(labels = c("ALM","VISp"), values=c("royalblue4", "firebrick")) +
   scale_x_discrete(labels= c("Tnc","Hsd11b1_Endou")) + 
   facet_wrap(~variable, ncol = 1, labeller = labeller(variable = label_facet(factor(transcript), padj_limma, rank_limma, padj_satuRn, rank_satuRn))) + 
-              theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size = 8)) + 
-              theme(strip.text = element_text(size = 7,face = "bold"))
+              theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5, size = 9)) + 
+              theme(strip.text = element_text(size = 8,face = "bold"))
 dev.off()
 ```
 
