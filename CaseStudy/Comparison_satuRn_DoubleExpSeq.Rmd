@@ -73,7 +73,33 @@ for (i in seq_along(DoubleExpSeq_results)) {
   z_working <- z_working[abs(z_working) < 10]
   current_plot <- locfdr(z_working)
   
-  mlests <- satuRn:::p.adjust_empirical_hlp(z_working)
+  ################# code from locfdr
+  N <- length(z_working)
+  b <- 4.3 * exp(-0.26 * log(N, 10))
+  med <- median(z_working)
+  sc <- diff(quantile(z_working)[c(2, 4)])/(2 * qnorm(0.75))
+  mlests <- locfdr:::locmle(z_working, xlim = c(med, b * 
+      sc))
+  lo <- min(z_working)
+  up <- max(z_working)
+  bre = 120
+  breaks <- seq(lo, up, length = bre)
+  zzz <- pmax(pmin(z_working, up), lo)
+  zh <- hist(zzz, breaks = breaks, plot = F)
+  x <- (breaks[-1] + breaks[-length(breaks)])/2
+  sw <- 0
+  X <- cbind(1, poly(x, df = 7))
+  zh <- hist(zzz, breaks = breaks, plot = F)
+  y <- zh$counts
+  f <- glm(y ~ poly(x, df = 7), poisson)$fit
+  Cov.in = list(x = x, X = X, f = f, sw = sw)
+  ml.out = locfdr:::locmle(z_working, xlim = c(mlests[1], 
+        b * mlests[2]), d = mlests[1], s = mlests[2], Cov.in = Cov.in)
+  mlests = ml.out$mle
+  
+  #################
+  
+  #mlests <- satuRn:::p.adjust_empirical(z_working,direction)
  
   zval_empirical <- (z - mlests[1])/mlests[2]
   pval_empirical <- 2 * pnorm(-abs(zval_empirical), mean = 0, sd = 1)
@@ -97,6 +123,27 @@ for (i in seq_along(DoubleExpSeq_results)) {
 }
 ```
 
+To generate Figure 7
+
+```{r}
+direction <- ifelse(DoubleExpSeq_results[[6]]$All[,1]-DoubleExpSeq_results[[6]]$All[,2] <= 0, 1,-1)
+pval <- DoubleExpSeq_results[[6]]$All[,"pVal"]
+FDR <- DoubleExpSeq_results[[6]]$All[,"Adj.pVal"]
+
+z <- qnorm(pval/2) * sign(direction)
+z_working <- z[!is.na(z)]
+z_working <- z_working[abs(z_working) < 10]
+
+png("./Results/CaseStudy/DoubleExpSeq_locfdr.png",
+        width     = 4.5,
+        height    = 3,
+        units     = "in",
+        res       = 500,
+        pointsize = 8)
+current_plot <- suppressWarnings(locfdr(z_working))
+dev.off()
+```
+
 The large number of p-values that are exatly 1 in the DoubleExpSeq results jeopardize using an empirical null to contral the number of false positive discoveries. While the number of significant DTU transcripts is reduced (see below), the results are likely not reliable.
 
 ```{r}
@@ -110,6 +157,34 @@ for (i in seq_along(DoubleExpSeq_results_locfdr)) {
   print(sum(DoubleExpSeq_results_locfdr[[i]]$FDR_empirical <0.05,na.rm = T))
 }
 ```
+
+# GSEA
+
+```{r}
+tx2gene <- as.data.frame(cbind(rowData(satuRn_results)[["isoform_id"]],rowData(satuRn_results)[["gene_id"]]))
+colnames(tx2gene) <- c("isoform_id","gene_id")
+tx2gene$isoform_id <- as.character(tx2gene$isoform_id)
+tx2gene$gene_id <- as.character(tx2gene$gene_id)
+
+# Without locfdr
+DES_DTU_all <- names(which(DoubleExpSeq_results[[6]]$All[,"Adj.pVal"] < 0.035)) # I took a cut-off of 0.035 to have slightly less genes, because MSigDb only allows for 1994 genes as input
+DES_DTU_all_gene <- unique(tx2gene[which(tx2gene$isoform_id %in% DES_DTU_all), "gene_id"])
+sink(file = "./Results/CaseStudy/GSEA/Tasic_L5IT_contrast6_DTU_DoubleExpSeq_all.txt")
+cat(DES_DTU_all_gene, "\n")
+sink()
+
+# With locfdr
+DES_DTU_locfdr <- DoubleExpSeq_results_locfdr[[6]][DoubleExpSeq_results_locfdr[[6]]$FDR_empirical < 0.05,]
+DES_DTU_locfdr <- DES_DTU_locfdr[-which(is.na(DES_DTU_locfdr$FDR_empirical)),]
+DES_DTU_locfdr <- rownames(DES_DTU_locfdr)
+DES_DTU_locfdr_gene <- unique(tx2gene[which(tx2gene$isoform_id %in% DES_DTU_locfdr), "gene_id"])
+sink(file = "./Results/CaseStudy/GSEA/Tasic_L5IT_contrast6_DTU_DoubleExpSeq_locfdr.txt")
+cat(DES_DTU_locfdr_gene, "\n")
+sink()
+```
+
+
+
 
 
 
