@@ -177,7 +177,7 @@ L[c("VISp.L5_IT_VISp_Whrn_Tox2", "ALM.L5_IT_ALM_Tmem163_Arhgap25"), 8] <- c(1,-1
 ## Test contrasts with satuRn
 
 ```{r}
-sumExp <- satuRn::topTable(object = sumExp, contrasts = L, plot=T, sort = F)
+sumExp <- satuRn::testDTU(object = sumExp, contrasts = L, plot=T, sort = F)
 ```
 
 ```{r}

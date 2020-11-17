@@ -21,7 +21,7 @@ satuRn_DTU <- function(countData, tx2gene, sampleData, quiet = FALSE){
     colnames(L) <- c("AvsB")
     L[1:2,] <- c(-1,1)
     
-    sumExp <- satuRn::topTable(object = sumExp, contrasts = L, plot=F)
+    sumExp <- satuRn::testDTU(object = sumExp, contrasts = L, plot=F)
     
     output <- data.frame(rownames(countData))
     rownames(output) <- rownames(countData)

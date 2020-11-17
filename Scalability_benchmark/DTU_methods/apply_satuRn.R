@@ -74,7 +74,7 @@ run_satuRn <- function(L,countData,tx2gene) {
         colnames(L) <- c("AvsB")
         L[1:2,] <- c(-1,1)
         
-        sumExp <- satuRn::topTable(object = sumExp, contrasts = L[,1,drop=FALSE], plot=F, sort = F)
+        sumExp <- satuRn::testDTU(object = sumExp, contrasts = L[,1,drop=FALSE], plot=F, sort = F)
         
         output <- data.frame(rownames(quantsf_counts))
         rownames(output) <- rownames(quantsf_counts)
