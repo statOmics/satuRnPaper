@@ -5,17 +5,21 @@ date: "02/11/2020"
 output: html_document
 ---
 
-**In order to run this script (1_Gtex_perpare.Rmd), two files should be downloaded from Zenodo and copied into the Data folder from this Github page**.
+**In order to run this script (1_Gtex_perpare.Rmd), two files should be downloaded from Zenodo and copied into the Data folder from this Github page**. Note that if you want to run the analysis on scaledTPM expression values, you must also copy a third file from Zenodo into the Data folder from this Github page
 
-1. 01_GTEx_baseline_dataset_count.gz
+1. GTEx_counts.gz 
 2. 01_GTEx_baseline_metadata.txt
+(3. GTEx_scaledTPM.gz)
 
 Note that these files are identical to the ones from the links above; we have only renamed the files.
 
 1. https://storage.googleapis.com/gtex_analysis_v8/rna_seq_data/GTEx_Analysis_2017-06-05_v8_RSEMv1.3.0_transcript_expected_count.gct.gz
 2. https://storage.googleapis.com/gtex_analysis_v8/annotations/GTEx_Analysis_v8_Annotations_SampleAttributesDS.txt
+3. https://storage.googleapis.com/gtex_analysis_v8/rna_seq_data/GTEx_Analysis_2017-06-05_v8_RSEMv1.3.0_transcript_tpm.gct.gz
 
-**If one does not want to run this script, its output can also be downloaded from Zenodo: 02_GTEx_benchmark_datasets_count.Rdata**
+**If you do not want to run this script, its output can also be downloaded from Zenodo: GTEx_benchmark_datasets_count.Rdata (or, alternatively, GTEx_benchmark_datasets_scaledTPM.Rdata) **
+
+Given the large datasets, this script is quite memory intensive!
 
 ```{r setup, include=FALSE, echo=FALSE}
 require("knitr")
@@ -34,10 +38,8 @@ library(doMC)
 # Load Gtex data
 
 ```{r,"load data"}
-#gtexCm <- fread("./Data/01_GTEx_baseline_dataset_count.gz", data.table = FALSE)
-gtexCm <- fread("/Users/jg/Desktop/paper_Data/Gtex_workingData/01_GTEx_baseline_dataset_count.gz", data.table = FALSE)
-#gtexSample <- fread("./Data/01_GTEx_baseline_metadata.txt", data.table = FALSE)
-gtexSample <- fread("/Users/jg/Desktop/paper_Data/Gtex_workingData/01_GTEx_baseline_metadata.txt", data.table = FALSE)
+gtexCm <- fread("./Data/GTEx_counts.gz", data.table = FALSE)
+gtexSample <- fread("./Data/GTEx_metadata.txt", data.table = FALSE)
 ```
 
 # Subset Gtex data
@@ -80,6 +82,29 @@ gtexSample <- gtexSample[
 gtexCm <- gtexCm[,which(
     colnames(gtexCm) %in% gtexSample$SAMPID
 )]
+```
+
+Uncomment this chunk of code if scaledTPM expression values need to be obained instead of raw counts
+
+```
+colsums_count <- colSums(gtexCm)
+rm("gtexCm")
+invisible(gc())
+gtexTPM <- fread('./Data/GTEx_scaledTPM.gz', data.table = FALSE)
+
+gtexTPM <- gtexTPM[,which(
+    colnames(gtexTPM) %in% gtexSample$SAMPID
+)]
+
+# Get gtexScaledTPM 
+colsums_TPM <- colSums(gtexTPM)
+scale_factors <- colsums_count/colsums_TPM
+
+gtexScaledTPM <- as.matrix(gtexTPM) %*% diag(scale_factors) # scaledTPM input
+gtexScaledTPM <- as.data.frame(gtexScaledTPM)
+colnames(gtexScaledTPM) <- colnames(gtexTPM)
+#rownames(gtexScaledTPM) <- txInfo$isoform_id
+gtexCm <- gtexScaledTPM
 ```
 
 # Setup generation of benchmark data
@@ -149,6 +174,7 @@ names(gtexBenchmarkDataStringent) <- paste0(names(nrRepList),"_filterStringent")
 # Save gtex benchmark data
 
 ```{r}
-save(gtexBenchmarkDataLenient, gtexBenchmarkDataStringent, file="./Data/02_GTEx_benchmark_datasets_count.Rdata")
+save(gtexBenchmarkDataLenient, gtexBenchmarkDataStringent, file="./Data/GTEx_benchmark_datasets_count.Rdata")
+save(gtexBenchmarkDataLenient, gtexBenchmarkDataStringent, file="./Data/GTEx_benchmark_datasets_scaledTPM.Rdata")
 ```
 

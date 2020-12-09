@@ -7,7 +7,7 @@ output: html_document
 
 **In order to run this script (1_Dmelanogaster_perpare.Rmd), the folder Dmelanogaster_kallisto.zip, which contains the kallisto quantification files for this dataset, should be downloaded from Zenodo and unzipped. In addition, two metaData files Dmelanogaster_metadata_1.xlsx, Dmelanogaster_metadata_2.txt should also be downloaded from Zenodo. All three files must then be copied into the Data folder of this Github page.** 
 
-**If one does not want to run this script, its output can also be downloaded from Zenodo: 02_Dmelanogaster_benchmark_datasets_count.Rdata**
+**If one does not want to run this script, its output can also be downloaded from Zenodo: Dmelanogaster_benchmark_datasets_count.Rdata (or, alternatively, Dmelanogaster_benchmark_datasets_scaledTPM.Rdata)**
 
 ```{r setup, include=FALSE, echo=FALSE}
 require("knitr")
@@ -162,8 +162,8 @@ dim(DmBenchmarkStringent$data)
 # Save Dmelanogaster benchmark data
 
 ```{r}
-save(DmBenchmarkLenient, DmBenchmarkStringent, file="./Data/02_Dmelanogaster_benchmark_datasets_count.Rdata")
-# save(DmBenchmarkLenient, DmBenchmarkStringent, file='"./Data/02_Dmelanogaster_benchmark_datasets_scaledTPM.Rdata")
+save(DmBenchmarkLenient, DmBenchmarkStringent, file="./Data/Dmelanogaster_benchmark_datasets_count.Rdata")
+#save(DmBenchmarkLenient, DmBenchmarkStringent, file="./Data/Dmelanogaster_benchmark_datasets_scaledTPM.Rdata")
 ```
 
 

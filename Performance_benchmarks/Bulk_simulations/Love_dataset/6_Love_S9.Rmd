@@ -1,0 +1,136 @@
+---
+title: "6_Love_S9"
+author: "Jeroen Gilis"
+date: "07/12/2020"
+output: html_document
+---
+
+This script (6_Love_S9.Rmd) is a seperate script for reproducing figure S9 from our publication. **In order to run this script (4_Love_DTU_subset.Rmd), the dataset Love_benchmark_datasets_scaledTPM.Rdata (or, alternatively, Love_benchmark_datasets_count.Rdata) is required.** This file can either be generated with the 1_Love_prepare.Rmd script or downloaded from Zenodo.
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+# Load libraries
+
+```{r,message=FALSE}
+library(ggplot2)
+library(iCOBRA)
+```
+
+# Load DTU performance data
+
+```{r}
+# use scaledTPM results for the datasets based on Love et al. (and counts for all other datasets)
+load(file="./Data/Love_DTU_results_scaledTPM.Rdata")
+
+loveBenchmark <- c(
+    loveDtuBenchmark_satuRn,
+    loveDtuBenchmark_DoubleExpSeq,
+    loveDtuBenchmark_limmaDiffsplice,
+    loveDtuBenchmark_edgeRdiffsplice,
+    loveDtuBenchmark_DEXSeq,
+    loveDtuBenchmark_DRIMSeq,
+    loveDtuBenchmark_NBSplice
+)
+
+### Remove empty enteries (due to not tested - aka to many samples for reasonable runtime)
+loveBenchmark  <- loveBenchmark[which(
+    sapply(loveBenchmark, function(x) ! is.null(x$dtuAnalysis))
+)]
+
+rm(loveDtuBenchmark_satuRn,
+    loveDtuBenchmark_DoubleExpSeq,
+    loveDtuBenchmark_limmaDiffsplice,
+    loveDtuBenchmark_edgeRdiffsplice,
+    loveDtuBenchmark_DEXSeq,
+    loveDtuBenchmark_DRIMSeq,
+    loveDtuBenchmark_NBSplice)
+invisible(gc())
+```
+
+# Load and wrangle truth file
+
+```{r}
+# define the truth (copy from swimming downstream paper by Love et al.,F1000Research 2018, 7:952)
+load("./Data/Love_metadata.rda")
+txdf <- txdf[match(rownames(tpms), txdf$TXNAME),]
+txdf$dtu.genes <- iso.dtu | iso.dte & !iso.dte.only
+full.dtu.genes <- unique(txdf$GENEID[txdf$dtu.genes])
+
+txp.exprs <- rowSums(tpms) > 0
+dtu.dte.genes <- unique(txdf$GENEID[iso.dte & !iso.dte.only])
+txdf$full.dtu <- iso.dtu | (txdf$GENEID %in% dtu.dte.genes & txp.exprs)
+dtu.txps <- txdf$TXNAME[txdf$full.dtu]
+```
+
+# Figure S9A
+
+```{r}
+tval <- loveBenchmark[["satuRn_samples_used_6_rep_2_filterLenient"]]$dtuAnalysis$tvalue
+pval <- loveBenchmark[["satuRn_samples_used_6_rep_2_filterLenient"]]$dtuAnalysis$p_value_raw
+  
+zval <- qnorm(pval/2) * sign(tval)
+zval_mid <- zval[abs(zval) < 10]
+zval_mid <- zval_mid[!is.na(zval_mid)]
+
+png("./Results/Love_benchmark/figS9A.png",
+    width     = 3.5,
+    height    = 2.5,
+    units     = "in",
+    res       = 300,
+    pointsize = 6) # start export
+plot <- locfdr::locfdr(zval_mid, main = "Love dataset - 6v6 - edgeR filter - repeat 2")
+dev.off()
+```
+
+# Figure S9B
+
+```{r}
+Love_select <- loveBenchmark[["satuRn_samples_used_6_rep_2_filterLenient"]]$dtuAnalysis
+    
+pvalues <- as.data.frame(cbind(Love_select$p_value_raw,Love_select$p_value))
+colnames(pvalues) <- c("theoretical_null", "empirical_null")
+rownames(pvalues) <- rownames(Love_select)
+    
+# generate truth file
+truth_full_new <- as.data.frame(cbind(rownames(pvalues),rep(0,nrow(pvalues))))
+colnames(truth_full_new) <- c("TXNAME","truth")
+rownames(truth_full_new) <- truth_full_new$TXNAME
+truth_full_new$truth <- as.numeric(as.character(truth_full_new$truth))
+truth_full_new[which(sub("\\_.*", "", truth_full_new$TXNAME) %in% dtu.txps),"truth"] <- 1
+
+cobra <- COBRAData(pval = pvalues, truth = truth_full_new)
+cobra <- calculate_adjp(cobra)
+cobra1perf <- calculate_performance(cobra, binary_truth = "truth", cont_truth = "none", splv = "none", aspects = c("fdrtpr", "fdrtprcurve", "overlap"))
+
+cobraplot <- prepare_data_for_plot(cobra1perf, colorscheme = "Dark2", facetted = TRUE)
+
+new_col <- c(rep(c("black", "grey64", "#999999"),4),rep("white",6))
+names(new_col) <- names(cobraplot@plotcolors)
+cobraplot@plotcolors <- new_col
+    
+plot <- plot_fdrtprcurve(cobraplot, xaxisrange = c(0, 0.4), yaxisrange = c(0,1))
+
+plot <- plot + 
+    ggtitle(label="Love dataset - 6v6 - edgeR filter - repeat 2") +
+    xlab("FDP") +
+    theme(strip.background = element_blank(),
+    strip.text.x = element_blank(),
+    plot.title = element_text(size=10),
+    axis.text.x = element_text(size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_text(size = 10),
+    axis.title.y = element_text(size = 10))
+
+png("./Results/Love_benchmark/figS9B.png",
+    width = 5.5,
+    height = 4.5,
+    units = "in",
+    res = 200,
+    pointsize = 4) # start export
+print(plot)
+dev.off()
+```
+

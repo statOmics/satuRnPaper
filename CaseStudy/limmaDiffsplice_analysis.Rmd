@@ -5,6 +5,14 @@ date: "11/11/2020"
 output: html_document
 ---
 
+This is scripts performs a DTU analysis with limma diffsplice on a subset of cells from the single-cell RNA-Seq dataset by Tasic et al. [Tasic paper](https://doi.org/10.1038/s41586-018-0654-5). In order to run this script, three files should be downloaded from Zenodo and placed in the data folder of this GitHub repository;
+
+1. Tasic_caseStudy_transcript_counts.Rds (transcript-level expression matrix)
+2. Tasic_metadata_1.xlsx
+3. Tasic_metadata_2.csv
+
+Note that the metadata files are identical to the one supplemented by Tasic et al., Supplementary_Table_10_Full_Metadata.xlsx and GSE115746_accession_table.csv, respectively. All figures generated in this script are available from our GitHub repository under ./Results/CaseStudy/
+
 ```{r setup, include=FALSE, echo=FALSE}
 require("knitr")
 opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
@@ -19,7 +27,7 @@ library(ensembldb)
 
 # for analysis
 library(edgeR)
-library(tidyverse)
+#library(tidyverse)
 
 # for visualization
 library(ggplot2)
@@ -160,7 +168,7 @@ for (i in seq_len(ncol(ex$coefficients))) {
 
 Without correction, we obtain a huge number of DTU transcripts with the limma analysis. Therefore, we additionally post-process the results according to the empirical FDR strategy implemented in satuRn (which is adapted from the locfdr function from the locfdr package by Efron et al.).
 
-At the same time, all panels of Figures S11 and S12 of our paper are generated.
+At the same time, all panels of Figures S12 and S13 of our paper are generated.
 
 ```{r}
 limmaRes_all<- list()
@@ -171,22 +179,22 @@ for (i in seq_len(ncol(ex$coefficients))) {
   pval <- limmaRes$P.Value
   FDR <- limmaRes$FDR
   
-  # Generate Figure S11
-  png(paste("./Results/caseStudy/FigureS11_", i, ".png", sep = ""),
+  # Generate Figure S12
+  png(paste("./Results/caseStudy/FigureS12_", i, ".png", sep = ""),
           width     = 3.5,
           height    = 2.5,
           units     = "in",
           res       = 300,
           pointsize = 6) # start export
-  hist(pval, breaks=40, main = paste("contrast",i))
+  hist(pval, breaks=40, main = paste("contrast",i), col="white")
   dev.off()
   
-  # Generate Figure S12
+  # Generate Figure S13
   zval <- qnorm(pval/2)*sign(t)
   zval_mid <- zval[abs(zval) < 10]
   zval_mid <- zval_mid[!is.na(zval_mid)]
   
-  png(paste("./Results/caseStudy/FigureS12_", i, ".png", sep = ""),
+  png(paste("./Results/caseStudy/FigureS13_", i, ".png", sep = ""),
           width     = 3.5,
           height    = 2.5,
           units     = "in",
@@ -212,7 +220,7 @@ for (i in seq_len(ncol(ex$coefficients))) {
 
 # Save final object
 
-Save resulting object for later comparison of results with satuRn
+Save resulting object for later comparison of results with satuRn and DoubleExpSeq.
 
 ```{r}
 saveRDS(limmaRes_all,file = "./Data/Tasic_caseStudy_limmaDiffsplice.Rds")

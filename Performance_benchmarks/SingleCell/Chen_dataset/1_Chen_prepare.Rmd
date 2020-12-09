@@ -5,12 +5,9 @@ date: "03/11/2020"
 output: html_document
 ---
 
-**In order to run this script (1_Chen_perpare.Rmd), the corresponding salmon quantification files Chen_counts.Rds should either be obtained by running 0_Chen_getData.Rmd or downloaded from Zenodo. In addition, the metaData Chen_metadata.csv should also be downloaded from Zenodo. Both files must then be copied into the Data folder of this Github page**.
+**In order to run this script (1_Chen_perpare.Rmd), the corresponding expression count file Chen_counts.Rds (or, alternatively, Chen_scaledTPM.Rds) be downloaded from Zenodo. In addition, the metaData Chen_metadata.csv should also be downloaded from Zenodo. Both files must then be copied into the Data folder of this Github page**.
 
-1. Chen_counts.Rds
-2. Chen_metadata.csv
-
-**If one does not want to run this script, its output can also be downloaded from Zenodo: 02_Chen_benchmark_datasets_count.Rdata**
+**If one does not want to run this script, its output can also be downloaded from Zenodo: Chen_benchmark_datasets_count.Rdata (or, alternatively, Chen_benchmark_datasets_scaledTPM.Rdata) **
 
 ```{r setup, include=FALSE, echo=FALSE}
 require("knitr")
@@ -31,7 +28,7 @@ library(doMC)
 
 ```{r}
 Chen_counts <- readRDS(file = "./Data/Chen_counts.Rds")
-# Chen_counts <- readRDS(file =./Data/Chen_scaledTPM.Rds)
+#Chen_counts <- readRDS(file ="./Data/Chen_scaledTPM.Rds")
 
 ## remove transcripts with zero count for all cells
 Chen_counts <- Chen_counts[which(rowSums(Chen_counts)!=0),]
@@ -159,8 +156,8 @@ names(ChenBenchmarkStringent) <- paste0(names(nrRepList),"_filterStringent")
 # Save Chen benchmark data
 
 ```{r}
-save(ChenBenchmarkLenient, ChenBenchmarkStringent, file="./Data/02_Chen_benchmark_datasets_count.Rdata")
-#save(ChenBenchmarkLenient, ChenBenchmarkStringent, file="./Data/02_Chen_benchmark_datasets_scaledTPM.Rdata")
+#save(ChenBenchmarkLenient, ChenBenchmarkStringent, file="./Data/Chen_benchmark_datasets_count.Rdata")
+save(ChenBenchmarkLenient, ChenBenchmarkStringent, file="./Data/Chen_benchmark_datasets_scaledTPM.Rdata")
 ```
 
 

@@ -5,12 +5,9 @@ date: "05/11/2020"
 output: html_document
 ---
 
-**In order to run this script (1_Tasic_perpare.Rmd), the corresponding salmon quantification files Tasic_counts.Rds should either be obtained by running 0_Tasic_getData.Rmd or downloaded from Zenodo. In addition, two metaData files Tasic_metadata_1.xlsx, Tasic_metadata_2.csv should also be downloaded from Zenodo. All three files must then be copied into the Data folder of this Github page**. Note that the metadata files are identical to the one supplemented in the paper by Tasic et al. [Tasic paper](https://doi.org/10.1038/s41586-018-0654-5), Supplementary_Table_10_Full_Metadata.xlsx and GSE115746_accession_table.csv, respectively.
+**In order to run this script (1_Tasic_perpare.Rmd), the expression count matrix Tasic_counts.Rds (or, alternatively, Tasic_scaledTPM.Rds) should be downloaded from Zenodo. In addition, two metaData files Tasic_metadata_1.xlsx, Tasic_metadata_2.csv should also be downloaded from Zenodo. All three files must then be copied into the Data folder of this Github page**. Note that the metadata files are identical to the one supplemented in the paper by Tasic et al. [Tasic paper](https://doi.org/10.1038/s41586-018-0654-5), Supplementary_Table_10_Full_Metadata.xlsx and GSE115746_accession_table.csv, respectively.
 
-1. Tasic_counts.Rds
-2. Tasic_metadata.xlsx
-
-**If one does not want to run this script, its output can also be downloaded from Zenodo: 02_Tasic_benchmark_datasets_count.Rdata**
+**If you do not want to run this script, its output can also be downloaded from Zenodo: Tasic_benchmark_datasets_count.Rdata (or, alternatively, Tasic_benchmark_datasets_scaledTPM.Rdata) **
 
 ```{r setup, include=FALSE, echo=FALSE}
 require("knitr")
@@ -32,7 +29,7 @@ library(doMC)
 
 ```{r}
 Tasic_counts <- readRDS(file = "./Data/Tasic_counts.Rds")
-# Tasic_counts <- readRDS(file = "./Data/Tasic_scaledTPM.Rds")
+#Tasic_counts <- readRDS(file = "./Data/Tasic_scaledTPM.Rds")
 
 metaData_1 <- openxlsx::read.xlsx("./Data/Tasic_metadata_1.xlsx")
 metaData_2 <- read.csv2("./Data/Tasic_metadata_2.csv",sep = "\t")
@@ -165,8 +162,8 @@ names(TasicBenchmarkStringent) <- paste0(names(nrRepList),"_filterStringent")
 # Save Tasic benchmark data
 
 ```{r}
-save(TasicBenchmarkLenient, TasicBenchmarkStringent, file="./Data/02_Tasic_benchmark_datasets_count.Rdata")
-#save(TasicBenchmarkLenient, TasicBenchmarkStringent, file="./Data/02_Tasicbenchmark_datasets_scaledTPM.Rdata")
+#save(TasicBenchmarkLenient, TasicBenchmarkStringent, file="./Data/Tasic_benchmark_datasets_count.Rdata")
+save(TasicBenchmarkLenient, TasicBenchmarkStringent, file="./Data/Tasic_benchmark_datasets_scaledTPM.Rdata")
 ```
 
 

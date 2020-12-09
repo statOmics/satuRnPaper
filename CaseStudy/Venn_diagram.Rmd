@@ -1,0 +1,89 @@
+---
+title: "Venn_diagram"
+author: "Jeroen Gilis"
+date: "04/12/2020"
+output: html_document
+---
+
+This is scripts compares the DTU results between satuRn, limma diffsplice and DoubleExpSeq by means of a Venn daigram (Figure 9 from the publication). In order to run this script, three files should be downloaded from Zenodo and placed in the data folder of this GitHub repository;
+
+1. Tasic_caseStudy_satuRn.Rds (satuRn DTU results)
+2. Tasic_caseStudy_limmaDiffsplice.Rds (limma diffsplice DTU results)
+3. Tasic_caseStudy_DoubleExpSeq.Rds (DoubleExpSeq DTU results)
+
+Note that the metadata files are identical to the one supplemented by Tasic et al., Supplementary_Table_10_Full_Metadata.xlsx and GSE115746_accession_table.csv, respectively. All figures generated in this script are available from our GitHub repository under ./Results/CaseStudy/
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+# Load libraries
+
+```{r, message=FALSE, warning=FALSE}
+library(SummarizedExperiment)
+library(ggplot2)
+#library(tidyverse)
+library(VennDiagram)
+library(grid)
+```
+
+# Load data
+
+These are the results of the analyses of the Tasic case study with satuRn (generated in satuRn_analysis.Rmd), limma diffsplice (generated in limmaDiffsplice_analysis.Rmd) and DoubleExpSeq (generated in DoubleExpSeq_analysis.Rmd).
+
+```{r}
+satuRn_results <- readRDS(file="./Data/Tasic_caseStudy_satuRn.Rds")
+limmaRes_results <- readRDS(file="./Data/Tasic_caseStudy_limmaDiffsplice.Rds")
+DoubleExpSeq_results <- readRDS(file="./Data/Tasic_caseStudy_DoubleExpSeq.Rds")
+```
+
+# Venn diagram for top200 transcipts in contrast 6
+
+## Extract top200 transcripts in contrast 6
+
+```{r}
+# satuRn
+satuRn_results_comp6_top200 <- rowData(satuRn_results)[["fitDTUResult_C6"]]
+satuRn_results_comp6_top200 <- satuRn_results_comp6_top200[order(satuRn_results_comp6_top200$empirical_pval),][1:200,]
+satuRn_results_comp6_top200 <- rownames(satuRn_results_comp6_top200)
+
+# limma diffsplice
+limmaRes_results_comp6_top200 <- limmaRes_results[[6]]
+limmaRes_results_comp6_top200 <- limmaRes_results_comp6_top200[order(limmaRes_results_comp6_top200$empirical_pval),][1:200,]
+limmaRes_results_comp6_top200 <- rownames(limmaRes_results_comp6_top200)
+
+# DoubleExpSeq
+DoubleExpSeq_results_comp6_top200 <- as.data.frame(DoubleExpSeq_results[[6]]$All)
+DoubleExpSeq_results_comp6_top200 <- DoubleExpSeq_results_comp6_top200[order(DoubleExpSeq_results_comp6_top200$pVal),][1:200,]
+DoubleExpSeq_results_comp6_top200 <- rownames(DoubleExpSeq_results_comp6_top200)
+```
+
+## create Venn diagram
+
+Venn diagrams
+
+```{r}
+png("./Results/CaseStudy/VennDiagram.png",
+      width     = 4,
+      height    = 4,
+      units     = "in",
+      res       = 200,
+      pointsize = 8) # start export
+      
+grid::grid.newpage()
+grid::grid.draw(VennDiagram::venn.diagram(list(satuRn=satuRn_results_comp6_top200,
+                                               Limma_diffsplice=limmaRes_results_comp6_top200,
+                                               DoubleExpSeq=DoubleExpSeq_results_comp6_top200), 
+                                          filename = NULL, 
+                                          main="Top200 DTU transcripts",
+                                          main.fontface = "bold",
+                                          cex = 2,
+                                          main.cex = 2.5,
+                                          cat.cex = 2,
+                                          fill = c("black", "darkblue", "#56B4E9"),
+                                          margin = 0.1,
+                                          cat.just = list(c(1,-0.5),c(0.6,-0.5),c(1.3,0))))
+dev.off()
+```
+

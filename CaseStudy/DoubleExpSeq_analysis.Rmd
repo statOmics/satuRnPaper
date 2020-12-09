@@ -5,6 +5,14 @@ date: "11/11/2020"
 output: html_document
 ---
 
+This is scripts performs a DTU analysis with DoubleExpSeq on a subset of cells from the single-cell RNA-Seq dataset by Tasic et al. [Tasic paper](https://doi.org/10.1038/s41586-018-0654-5). In order to run this script, three files should be downloaded from Zenodo and placed in the data folder of this GitHub repository;
+
+1. Tasic_caseStudy_transcript_counts.Rds (transcript-level expression matrix)
+2. Tasic_metadata_1.xlsx
+3. Tasic_metadata_2.csv
+
+Note that the metadata files are identical to the one supplemented by Tasic et al., Supplementary_Table_10_Full_Metadata.xlsx and GSE115746_accession_table.csv, respectively. All figures generated in this script are available from our GitHub repository under ./Results/CaseStudy/
+
 ```{r setup, include=FALSE, echo=FALSE}
 require("knitr")
 opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
@@ -20,7 +28,7 @@ library(openxlsx)
 
 ## for analysis
 library(edgeR)
-library(tidyverse)
+#library(tidyverse)
 library(DoubleExpSeq)
 library(SummarizedExperiment)
 
@@ -184,7 +192,7 @@ for (i in seq_along(DES_results)) {
 
 # Save final object
 
-Save resulting object for later comparison of results with satuRn
+Save resulting object for later comparison of results with satuRn and limma diffsplice.
 
 ```{r}
 saveRDS(DES_results, "./Data/Tasic_caseStudy_DoubleExpSeq.Rds")

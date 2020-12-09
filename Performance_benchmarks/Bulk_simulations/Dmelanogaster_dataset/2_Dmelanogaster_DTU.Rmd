@@ -5,9 +5,11 @@ date: "05/11/2020"
 output: html_document
 ---
 
-**In order to run this script (2_Dmelanogaster_DTU.Rmd), the dataset 02_Dmelanogaster_benchmark_datasets_count.Rdata is required.** This file can either be generated with the 1_Dmelanogaster_prepare.Rmd script or downloaded from Zenodo.
+**In order to run this script (2_Dmelanogaster_DTU.Rmd), the dataset Dmelanogaster_benchmark_datasets_count.Rdata (or, alternatively, Dmelanogaster_benchmark_datasets_scaledTPM.Rdata) is required.** This file can either be generated with the 1_Dmelanogaster_prepare.Rmd script or downloaded from Zenodo.
 
-Here we run the DTU analyses for 7 DTU methods on both Dmelanogaster benchmark datasets. This code runs a couple of minutes on a MacBook Pro 2018, processor; 2,3 GHz Quad-Core Intel Core i5, 16GB RAM. Most of this runtime was attributed to the DEXSeq and DRIMSeq analyses.
+Here we run the DTU analyses for 7 DTU methods on both Dmelanogaster benchmark datasets. This code runs only a couple of minutes on a MacBook Pro 2018, processor; 2,3 GHz Quad-Core Intel Core i5, 16GB RAM. Most of this runtime was attributed to the DRIMSeq analysis.
+
+**If you do not want to run this script, its output can also be downloaded from Zenodo: Dmelanogaster_DTU_results_count.Rdata (or, alternatively, Dmelanogaster_DTU_results_scaledTPM.Rdata)**
 
 ```{r setup, include=FALSE, echo=FALSE}
 require("knitr")
@@ -31,7 +33,10 @@ library(doMC)
 
 source(file="./Performance_benchmarks/DTU_methods.R")
 ```
+
 # Set up parallel execution
+
+Note that the optimal parameter setting for parallelizing the DTU analyses depends on your specific computing system.
 
 ```{r}
 if(TRUE) {
@@ -56,8 +61,8 @@ This code runs a couple of minutes on a MacBook Pro 2018, processor; 2,3 GHz Qua
 
 ```{r}
 ### Load benchmark data
-load(file="./Data/02_Dmelanogaster_benchmark_datasets_count.Rdata")
-#load(file="./Data/02_Dmelanogaster_benchmark_datasets_scaledTPM.Rdata")
+load(file="./Data/Dmelanogaster_benchmark_datasets_count.Rdata")
+#load(file="./Data/Dmelanogaster_benchmark_datasets_scaledTPM.Rdata")
 
 DmBenchmarkLenient <- list(DmBenchmarkLenient)
 DmBenchmarkStringent <- list(DmBenchmarkStringent)
@@ -221,6 +226,7 @@ difftime(Sys.time(), tStart)
 
 print("start NBSplice")
 
+tStart <- Sys.time()
 DmDtuBenchmark_NBSplice <- plyr::llply(
     .data = DmBenchmarkData,
     .parallel = doParallel,
@@ -242,6 +248,7 @@ DmDtuBenchmark_NBSplice <- plyr::llply(
         return(list(dtuAnalysis = localRes))
     }
 )
+difftime(Sys.time(), tStart)
 
 ### add method name to list names for easy post-analysis
 names(DmDtuBenchmark_satuRn) <- paste0('satuRn_', names(DmDtuBenchmark_satuRn))
@@ -260,7 +267,7 @@ save(DmDtuBenchmark_satuRn,
     DmDtuBenchmark_DEXSeq,
     DmDtuBenchmark_DRIMSeq,
     DmDtuBenchmark_NBSplice,
-    file="./Data/03_Dmelanogaster_DTU_results_count.Rdata")
+    file="./Data/Dmelanogaster_DTU_results_count.Rdata")
 
 # save(DmDtuBenchmark_satuRn,
 #     DmDtuBenchmark_DoubleExpSeq,
@@ -269,7 +276,7 @@ save(DmDtuBenchmark_satuRn,
 #     DmDtuBenchmark_DEXSeq,
 #     DmDtuBenchmark_DRIMSeq,
 #     DmDtuBenchmark_NBSplice,
-#     file="./Data/03_Dmelanogaster_DTU_results_scaledTPM.Rdata")
+#     file="./Data/Dmelanogaster_DTU_results_scaledTPM.Rdata")
 ```
 
 

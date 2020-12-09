@@ -5,6 +5,13 @@ date: "11/11/2020"
 output: html_document
 ---
 
+This is scripts performs qualitative comparison between the results of the DTU analysis with satuRn and the DTU analysis with DoubleExpSeq. In order to run this script, two files should be downloaded from Zenodo and placed in the data folder of this GitHub repository;
+
+1. Tasic_caseStudy_satuRn.Rds (satuRn DTU results)
+2. Tasic_caseStudy_DoubleExpSeq.Rds (DoubleExpSeq DTU results)
+
+Note that the metadata files are identical to the one supplemented by Tasic et al., Supplementary_Table_10_Full_Metadata.xlsx and GSE115746_accession_table.csv, respectively. All figures generated in this script are available from our GitHub repository under ./Results/CaseStudy/
+
 ```{r setup, include=FALSE, echo=FALSE}
 require("knitr")
 opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
@@ -16,7 +23,7 @@ opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 library(SummarizedExperiment)
 library(satuRn)
 library(ggplot2)
-library(tidyverse)
+#library(tidyverse)
 library(locfdr)
 ```
 
@@ -29,13 +36,13 @@ satuRn_results <- readRDS(file="./Data/Tasic_caseStudy_satuRn.Rds")
 DoubleExpSeq_results <- readRDS(file="./Data/Tasic_caseStudy_DoubleExpSeq.Rds")
 ```
 
-# DoubleExpSeq p-value distribution
+# DoubleExpSeq p-value distribution figure S14
 
 DoubleExpSeq displays a pathological distribution of p-values.
 
 ```{r}
 for (i in seq_along(DoubleExpSeq_results)) {
-    png(paste("./Results/caseStudy/FigureS10_", i, ".png", sep = ""),
+    png(paste("./Results/caseStudy/FigureS14_", i, ".png", sep = ""),
             width     = 3.5,
             height    = 2.5,
             units     = "in",
@@ -63,17 +70,13 @@ for (i in seq_along(DoubleExpSeq_results)) {
   direction <- ifelse(DoubleExpSeq_results[[i]]$All[,1]-DoubleExpSeq_results[[i]]$All[,2] <= 0, 1,-1)
   pval <- DoubleExpSeq_results[[i]]$All[,"pVal"]
   FDR <- DoubleExpSeq_results[[i]]$All[,"Adj.pVal"]
-  
-  # direction <- direction[-which(pval==1)]
-  # FDR <- FDR[-which(pval==1)]
-  # pval <- pval[-which(pval==1)]
 
   z <- qnorm(pval/2) * sign(direction)
   z_working <- z[!is.na(z)]
   z_working <- z_working[abs(z_working) < 10]
   current_plot <- locfdr(z_working)
   
-  ################# code from locfdr
+  ################# start code from locfdr
   N <- length(z_working)
   b <- 4.3 * exp(-0.26 * log(N, 10))
   med <- median(z_working)
@@ -96,8 +99,7 @@ for (i in seq_along(DoubleExpSeq_results)) {
   ml.out = locfdr:::locmle(z_working, xlim = c(mlests[1], 
         b * mlests[2]), d = mlests[1], s = mlests[2], Cov.in = Cov.in)
   mlests = ml.out$mle
-  
-  #################
+  ################# end code from locfdr
   
   #mlests <- satuRn:::p.adjust_empirical(z_working,direction)
  
@@ -123,7 +125,7 @@ for (i in seq_along(DoubleExpSeq_results)) {
 }
 ```
 
-To generate Figure 7
+To generate Figure S15
 
 ```{r}
 direction <- ifelse(DoubleExpSeq_results[[6]]$All[,1]-DoubleExpSeq_results[[6]]$All[,2] <= 0, 1,-1)
@@ -134,7 +136,7 @@ z <- qnorm(pval/2) * sign(direction)
 z_working <- z[!is.na(z)]
 z_working <- z_working[abs(z_working) < 10]
 
-png("./Results/CaseStudy/DoubleExpSeq_locfdr.png",
+png("./Results/CaseStudy/FigureS15.png",
         width     = 4.5,
         height    = 3,
         units     = "in",
@@ -144,45 +146,7 @@ current_plot <- suppressWarnings(locfdr(z_working))
 dev.off()
 ```
 
-The large number of p-values that are exatly 1 in the DoubleExpSeq results jeopardize using an empirical null to contral the number of false positive discoveries. While the number of significant DTU transcripts is reduced (see below), the results are likely not reliable.
-
-```{r}
-for (i in seq_along(DoubleExpSeq_results)) {
-  print(sum(DoubleExpSeq_results[[i]]$All[,"Adj.pVal"] <0.05,na.rm = T))
-}
-
-print("after locFDR:")
-
-for (i in seq_along(DoubleExpSeq_results_locfdr)) {
-  print(sum(DoubleExpSeq_results_locfdr[[i]]$FDR_empirical <0.05,na.rm = T))
-}
-```
-
-# GSEA
-
-```{r}
-tx2gene <- as.data.frame(cbind(rowData(satuRn_results)[["isoform_id"]],rowData(satuRn_results)[["gene_id"]]))
-colnames(tx2gene) <- c("isoform_id","gene_id")
-tx2gene$isoform_id <- as.character(tx2gene$isoform_id)
-tx2gene$gene_id <- as.character(tx2gene$gene_id)
-
-# Without locfdr
-DES_DTU_all <- names(which(DoubleExpSeq_results[[6]]$All[,"Adj.pVal"] < 0.035)) # I took a cut-off of 0.035 to have slightly less genes, because MSigDb only allows for 1994 genes as input
-DES_DTU_all_gene <- unique(tx2gene[which(tx2gene$isoform_id %in% DES_DTU_all), "gene_id"])
-sink(file = "./Results/CaseStudy/GSEA/Tasic_L5IT_contrast6_DTU_DoubleExpSeq_all.txt")
-cat(DES_DTU_all_gene, "\n")
-sink()
-
-# With locfdr
-DES_DTU_locfdr <- DoubleExpSeq_results_locfdr[[6]][DoubleExpSeq_results_locfdr[[6]]$FDR_empirical < 0.05,]
-DES_DTU_locfdr <- DES_DTU_locfdr[-which(is.na(DES_DTU_locfdr$FDR_empirical)),]
-DES_DTU_locfdr <- rownames(DES_DTU_locfdr)
-DES_DTU_locfdr_gene <- unique(tx2gene[which(tx2gene$isoform_id %in% DES_DTU_locfdr), "gene_id"])
-sink(file = "./Results/CaseStudy/GSEA/Tasic_L5IT_contrast6_DTU_DoubleExpSeq_locfdr.txt")
-cat(DES_DTU_locfdr_gene, "\n")
-sink()
-```
-
+The large number of p-values that are exatly 1 in the DoubleExpSeq results jeopardize using an empirical null to control the number of false positive discoveries.
 
 
 

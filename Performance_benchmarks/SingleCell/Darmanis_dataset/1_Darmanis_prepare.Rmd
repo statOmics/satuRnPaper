@@ -5,11 +5,9 @@ date: "05/11/2020"
 output: html_document
 ---
 
-**In order to run this script (1_Darmanis_perpare.Rmd), the corresponding salmon quantification files GSE84465.rds can be downloaded from Zenodo and put in the Data folder of this GitHub repository.** Alternatively, the exact same quantification files can be downloaded from their original source: http://imlspenticton.uzh.ch/robinson_lab/conquer/data-mae/GSE84465.rds .
+**In order to run this script (1_Darmanis_perpare.Rmd), the expression count matrix Darmanis_counts.rds and corresponding metadata Darmanis_metadata.Rdata should be downloaded from Zenodo and put in the Data folder of this GitHub repository.** Alternatively, the exact same quantification files can be downloaded from their original source: http://imlspenticton.uzh.ch/robinson_lab/conquer/data-mae/GSE84465.rds .
 
-1. GSE84465.rds
-
-**If one does not want to run this script, its output can also be downloaded from Zenodo: 02_Darmanis_benchmark_datasets_count.Rdata**
+**If one does not want to run this script, its output can also be downloaded from Zenodo: Darmanis_benchmark_datasets_count.Rdata (or, alternatively, Darmanis_benchmark_datasets_scaledTPM.Rdata) **
 
 ```{r setup, include=FALSE, echo=FALSE}
 require("knitr")
@@ -53,28 +51,28 @@ In order to obtain a mock dataset, we need to construct a dataset where (ideally
 2. tsne.cluster = 8
 3. tissue.ch1 = Tumor
 
-**The cell-identifiers of the retained (Darmanis_metadata.Rdata) cells should be downloaded from Zenodo and placed in the data folder of our GitHub page.**
+The metadata of the retained cells can be retrieved from Darmanis_metadata.Rdata;
 
 ```{r}
 load(file = "./Data/Darmanis_metadata.Rdata")
-
 ### Subset expression matrix
 Darmanis_counts <- Darmanis_data@ExperimentList$tx@assays$data$count[,cellsOfInterest] # count input
 ```
 
-```
-### get scaledTPM
-Darmanis_counts_all <- Darmanis_data@ExperimentList$tx@assays$data$count[,cellsOfInterest] # count input
-Darmanis_TPM_all <- Darmanis_data@ExperimentList$tx@assays$data$TPM[,cellsOfInterest] # TPM input
+Uncomment this chunk of code to use scaledTPM in stead  of raw counts
 
-# get scaledTPM
-colsums_count <- colSums(Darmanis_counts_all)
-colsums_TPM <- colSums(Darmanis_TPM_all)
-scale_factors <- colsums_count/colsums_TPM
-
-Darmanis_scaledTPM_all <- Darmanis_TPM_all %*% diag(scale_factors) # scaledTPM input
-colnames(Darmanis_scaledTPM_all) <- colnames(Darmanis_counts_all)
-Darmanis_scaledTPM <- Darmanis_scaledTPM_all[,cellsOfInterest]
+```{r}
+# # get scaledTPM
+# Darmanis_counts_all <- Darmanis_data@ExperimentList$tx@assays$data$count[,cellsOfInterest] # count input
+# Darmanis_TPM_all <- Darmanis_data@ExperimentList$tx@assays$data$TPM[,cellsOfInterest] # TPM input
+# 
+# colsums_count <- colSums(Darmanis_counts_all)
+# colsums_TPM <- colSums(Darmanis_TPM_all)
+# scale_factors <- colsums_count/colsums_TPM
+# 
+# Darmanis_scaledTPM_all <- Darmanis_TPM_all %*% diag(scale_factors) # scaledTPM input
+# colnames(Darmanis_scaledTPM_all) <- colnames(Darmanis_counts_all)
+# Darmanis_counts <- Darmanis_scaledTPM_all[,cellsOfInterest]
 ```
 
 # Setup generation of benchmark data
@@ -157,6 +155,6 @@ names(DarmanisBenchmarkStringent) <- paste0(names(nrRepList),"_filterStringent")
 # Save Darmanis benchmark data
 
 ```{r}
-save(DarmanisBenchmarkLenient, DarmanisBenchmarkStringent, file="./Data/02_Darmanis_benchmark_datasets_count.Rdata")
-#save(ChenBenchmarkLenient, ChenBenchmarkStringent, file="./Data/02_Darmanis_benchmark_datasets_scaledTPM.Rdata")
+#save(DarmanisBenchmarkLenient, DarmanisBenchmarkStringent, file="./Data/Darmanis_benchmark_datasets_count.Rdata")
+save(DarmanisBenchmarkLenient, DarmanisBenchmarkStringent, file="./Data/Darmanis_benchmark_datasets_scaledTPM.Rdata")
 ```

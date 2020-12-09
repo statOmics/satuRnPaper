@@ -43,8 +43,8 @@ tx2gene$GENEID <- txs$gene_id
 
 ```{r}
 library(tximport)
-quantsf <- tximport(files, type = "salmon", tx2gene = tx2gene, ignoreTxVersion = TRUE, txOut = TRUE, countsFromAbundance = "no")
-#quantsf <- tximport(files, type = "salmon", tx2gene = tx2gene, ignoreTxVersion = TRUE, txOut = TRUE, countsFromAbundance = "scaledTPM")
+#quantsf <- tximport(files, type = "salmon", tx2gene = tx2gene, ignoreTxVersion = TRUE, txOut = TRUE, countsFromAbundance = "no")
+quantsf <- tximport(files, type = "salmon", tx2gene = tx2gene, ignoreTxVersion = TRUE, txOut = TRUE, countsFromAbundance = "scaledTPM")
 
 # library(BANDITS)
 # eff_len <- eff_len_compute(x_eff_len = quantsf$length)
@@ -63,8 +63,8 @@ colnames(quantsf$counts) <- selected
 ```
 
 ```{r}
-saveRDS(quantsf$counts, file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Chen_data/Chen_counts.Rds")
-#saveRDS(quantsf$counts, file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/new_analysis/Data/Chen_data/quantsf_scaledTPM.Rds")
+#saveRDS(quantsf$counts, file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Data/Chen_data/Chen_counts.Rds")
+saveRDS(quantsf$counts, file = "/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper//Data/Chen_data/quantsf_scaledTPM.Rds")
 ```
 
 

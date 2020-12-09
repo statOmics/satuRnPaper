@@ -3,19 +3,19 @@
 satuRn_DTU <- function(countData, tx2gene, sampleData, quiet = FALSE){
     
     colnames(tx2gene)[1:2] <- c("isoform_id", "gene_id")
-    group <- factor(sampleData$condition)
-    design <- model.matrix(~0+group)
+    tx2gene <- tx2gene[match(rownames(countData), tx2gene$isoform_id),]
+    condition <- factor(sampleData$condition)
+    design <- model.matrix(~0+condition)
     
     sumExp <- SummarizedExperiment::SummarizedExperiment(assays=list(counts=countData), colData = sampleData, rowData = tx2gene)
-    
-    metadata(sumExp)$formula <- ~0+group
-    
-    sumExp <- satuRn::fitQB(sumExp,
-                            parallel = TRUE,
+
+    sumExp <- satuRn::fitDTU(object = sumExp,
+                            formula = ~0+condition,
+                            parallel = FALSE,
                             BPPARAM = BiocParallel::bpparam(),
                             verbose = TRUE
     )
-    
+
     L <- matrix(0, ncol = 1, nrow = ncol(design))
     rownames(L) <- colnames(design)
     colnames(L) <- c("AvsB")
@@ -29,7 +29,7 @@ satuRn_DTU <- function(countData, tx2gene, sampleData, quiet = FALSE){
     
     output$GENEID <- tx2gene[match(output$TXNAME,tx2gene$TXNAME),"GENEID"]
     
-    result <- rowData(sumExp)[["fitQBResult_AvsB"]]
+    result <- rowData(sumExp)[["fitDTUResult_AvsB"]]
     
     output$tvalue <- result$t
     output$p_value_raw <- result$pval
@@ -74,6 +74,7 @@ DoubleExpSeq_DTU <- function(countData, tx2gene, sampleData,quiet=FALSE) {
                                        m = totalCount,
                                        groups = condition))
     
+    sign <- ifelse(mDouble$All[,1]-mDouble$All[,2] <= 0, 1,-1)
     pvalDouble <- mDouble$All[,"pVal"]
     dispDouble <- mDouble$All[,"Model.Disp"]
     
@@ -82,6 +83,7 @@ DoubleExpSeq_DTU <- function(countData, tx2gene, sampleData,quiet=FALSE) {
     colnames(localRes) <- "TXNAME"
     
     localRes$GENEID <- tx2gene[match(localRes$TXNAME,tx2gene$TXNAME),"GENEID"]
+    localRes$sign <- sign
     localRes$p_value <- pvalDouble ## here I am only returning p-values, could also look into storing logFCs and FDRs
     localRes$disp <- dispDouble
     

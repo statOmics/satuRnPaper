@@ -5,6 +5,13 @@ date: "11/11/2020"
 output: html_document
 ---
 
+This is scripts performs qualitative comparison between the results of the DTU analysis with satuRn and the DTU analysis with limma diffsplice. In order to run this script, two files should be downloaded from Zenodo and placed in the data folder of this GitHub repository;
+
+1. Tasic_caseStudy_satuRn.Rds (satuRn DTU results)
+2. Tasic_caseStudy_limmaDiffsplice.Rds (limma diffsplice DTU results)
+
+Note that the metadata files are identical to the one supplemented by Tasic et al., Supplementary_Table_10_Full_Metadata.xlsx and GSE115746_accession_table.csv, respectively. All figures generated in this script are available from our GitHub repository under ./Results/CaseStudy/
+
 ```{r setup, include=FALSE, echo=FALSE}
 require("knitr")
 opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
@@ -16,17 +23,16 @@ opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 library(SummarizedExperiment)
 library(satuRn)
 library(ggplot2)
-library(tidyverse)
+#library(tidyverse)
 ```
 
 # Load data
 
-These are the results of the analyses of the Tasic case study with satuRn (generated in satuRn_analysis.Rmd), limma diffsplice (generated in limmaDiffsplice_analysis.Rmd) and with edgeR (gene-level analysis, generated in edgeR_DGE_analysis.Rmd).
+These are the results of the analyses of the Tasic case study with satuRn (generated in satuRn_analysis.Rmd) and with limma diffsplice (generated in limmaDiffsplice_analysis.Rmd).
 
 ```{r}
 satuRn_results <- readRDS(file="./Data/Tasic_caseStudy_satuRn.Rds")
 limmaRes_results <- readRDS(file="./Data/Tasic_caseStudy_limmaDiffsplice.Rds")
-edgeR_results <- readRDS(file="./Data/Tasic_caseStudy_edgeR.Rds")
 ```
 
 Get ranks (in terms of significance) for each transcript in both mehtods
@@ -34,7 +40,7 @@ Get ranks (in terms of significance) for each transcript in both mehtods
 ```{r}
 txInfo <- as.data.frame(rowData(satuRn_results)[,c(1,2)])
 txInfo$rank_limma <- match(txInfo$isoform_id,rownames(limmaRes_results[[6]]))
-txInfo$rank_satuRn <- match(txInfo$isoform_id,rownames(rowData(satuRn_results)[["fitQBResult_C6"]])[order(rowData(satuRn_results)[["fitQBResult_C6"]]$empirical_pval)])
+txInfo$rank_satuRn <- match(txInfo$isoform_id,rownames(rowData(satuRn_results)[["fitDTUResult_C6"]])[order(rowData(satuRn_results)[["fitDTUResult_C6"]]$empirical_pval)])
 
 txInfo$diffRank <- abs(txInfo$rank_limma - txInfo$rank_satuRn) # difference in ranks between both methods
 ```
@@ -64,8 +70,8 @@ head(frac_zero)
 Identify DTU transcripts in both methods
 
 ```{r}
-satuRn_DTU <- rowData(satuRn_results)[["fitQBResult_C6"]]$empirical_FDR # DTU in satuRn
-names(satuRn_DTU) <- rownames(rowData(satuRn_results)[["fitQBResult_C6"]])
+satuRn_DTU <- rowData(satuRn_results)[["fitDTUResult_C6"]]$empirical_FDR # DTU in satuRn
+names(satuRn_DTU) <- rownames(rowData(satuRn_results)[["fitDTUResult_C6"]])
 
 limma_DTU <- limmaRes_results[[6]]$empirical_FDR # DTU in limma
 names(limma_DTU) <- rownames(limmaRes_results[[6]])
@@ -141,20 +147,20 @@ dev.off()
 
 ## Examples
 
-As a consequence, transcripts belonging to lowly expressed genes are correctly considered less informative in satuRn and are thus less likely to be picked up. In Figure 9A, we show that while our method estimates a mean usage of 7% in Tnc cells and 26% in Hsd11b1 Endou cells (indicated by the gold diamond), the transcript is not identified as differentially used, given the low abundance of the corresponding gene and the highly dispersed single-cell level observations.
+As a consequence, transcripts belonging to lowly expressed genes are correctly considered less informative in satuRn and are thus less likely to be picked up. In Figure 8A, we show that while our method estimates a mean usage of 7% in Tnc cells and 26% in Hsd11b1 Endou cells (indicated by the gold diamond), the transcript is not identified as differentially used, given the low abundance of the corresponding gene and the highly dispersed single-cell level observations.
 
 ```{r}
 group1 <- rownames(colData(satuRn_results))[colData(satuRn_results)$group == "ALM.L5_IT_ALM_Tnc"]
 group2 <- rownames(colData(satuRn_results))[colData(satuRn_results)$group == "VISp.L5_IT_VISp_Hsd11b1_Endou"]
 
-plot_9A <- satuRn::plotDTU(object = satuRn_results, contrast = "C6", groups = list(group1,group2), coefficients = list(c(0,0,0,0,0,0,0,0,1,0,0,0,0,0),c(0,0,0,0,0,0,0,0,0,0,0,0,1,0)), summaryStat = c("model","mean"), transcripts = "ENSMUST00000080335",genes = NULL,top.n = 6)
+plot_8A <- satuRn::plotDTU(object = satuRn_results, contrast = "C6", groups = list(group1,group2), coefficients = list(c(0,0,0,0,0,0,0,0,1,0,0,0,0,0),c(0,0,0,0,0,0,0,0,0,0,0,0,1,0)), summaryStat = c("model","mean"), transcripts = "ENSMUST00000080335",genes = NULL,top.n = 6)
 
 # get same layout for figure as in paper
 transcript <- "ENSMUST00000080335"
 padj_limma <- format(limmaRes_results[[6]][transcript,"empirical_FDR"],digits=4)
 rank_limma <- txInfo[txInfo$isoform_id == transcript,"rank_limma"]
 
-padj_satuRn <- format(rowData(satuRn_results)[["fitQBResult_C6"]][transcript,"empirical_FDR"],digits=4)
+padj_satuRn <- format(rowData(satuRn_results)[["fitDTUResult_C6"]][transcript,"empirical_FDR"],digits=4)
 rank_satuRn <- txInfo[txInfo$isoform_id == transcript,"rank_satuRn"]
 
 label_facet <- function(txID, padj_limma, rank_limma, padj_satuRn, rank_satuRn) 
@@ -172,7 +178,7 @@ png("./Results/caseStudy/Figure8A.png",
   units     = "in",
   res       = 200,
   pointsize = 4)
-plot_9A[[1]] +
+plot_8A[[1]] +
   scale_fill_manual(labels = c("ALM","VISp"), values=c("royalblue4", "firebrick")) +
   scale_x_discrete(labels= c("Tnc","Hsd11b1_Endou")) + 
   facet_wrap(~variable, ncol = 1, labeller = labeller(variable = label_facet(factor(transcript), padj_limma, rank_limma, padj_satuRn, rank_satuRn))) + 
@@ -188,17 +194,17 @@ Conversely, by looking at the transcripts that were highly ranked in our DTU lis
 
 ## Example
 
-An example of such a transcript is shown in Figure 9B.
+An example of such a transcript is shown in Figure 8B.
 
 ```{r}
-plot_9B <- satuRn::plotDTU(object = satuRn_results, contrast = "C6", groups = list(group1,group2), coefficients = list(c(0,0,0,0,0,0,0,0,1,0,0,0,0,0),c(0,0,0,0,0,0,0,0,0,0,0,0,1,0)), summaryStat = "model", transcripts = "ENSMUST00000125287",genes = NULL,top.n = 6)
+plot_8B <- satuRn::plotDTU(object = satuRn_results, contrast = "C6", groups = list(group1,group2), coefficients = list(c(0,0,0,0,0,0,0,0,1,0,0,0,0,0),c(0,0,0,0,0,0,0,0,0,0,0,0,1,0)), summaryStat = "model", transcripts = "ENSMUST00000125287",genes = NULL,top.n = 6)
 
 # get same layout for figure as in paper
 transcript <- "ENSMUST00000125287"
 padj_limma <- format(limmaRes_results[[6]][transcript,"empirical_FDR"],digits=4)
 rank_limma <- txInfo[txInfo$isoform_id == transcript,"rank_limma"]
 
-padj_satuRn <- format(rowData(satuRn_results)[["fitQBResult_C6"]][transcript,"empirical_FDR"],digits=4)
+padj_satuRn <- format(rowData(satuRn_results)[["fitDTUResult_C6"]][transcript,"empirical_FDR"],digits=4)
 rank_satuRn <- txInfo[txInfo$isoform_id == transcript,"rank_satuRn"]
 
 # plot figure 8B
@@ -208,7 +214,7 @@ png("./Results/caseStudy/Figure8B.png",
   units     = "in",
   res       = 200,
   pointsize = 4)
-plot_9B[[1]] +
+plot_8B[[1]] +
   scale_fill_manual(labels = c("ALM","VISp"), values=c("royalblue4", "firebrick")) +
   scale_x_discrete(labels= c("Tnc","Hsd11b1_Endou")) + 
   facet_wrap(~variable, ncol = 1, labeller = labeller(variable = label_facet(factor(transcript), padj_limma, rank_limma, padj_satuRn, rank_satuRn))) + 
@@ -224,17 +230,17 @@ DTU claims by limma are driven by differences in raw mean usages of transcripts.
 
 ## Example
 
-In Figure 9C, the raw mean usage of the transcript is 77% in Tnc cells and 45% in Hsd11b1 Endou cells, as indicated by the cyan diamonds. By contrast, the mean usage estimate by satuRn, which takes into account that the Hsd11b1 Endou cells expressing the transcript at 0% usage have low gene-level count, is 83% for Tnc cells and 75% for Hsd11b1 Endou cells, as indicated by the gold diamonds.
+In Figure 8C, the raw mean usage of the transcript is 77% in Tnc cells and 45% in Hsd11b1 Endou cells, as indicated by the cyan diamonds. By contrast, the mean usage estimate by satuRn, which takes into account that the Hsd11b1 Endou cells expressing the transcript at 0% usage have low gene-level count, is 83% for Tnc cells and 75% for Hsd11b1 Endou cells, as indicated by the gold diamonds.
 
 ```{r}
-plot_9C <- satuRn::plotDTU(object = satuRn_results, contrast = "C6", groups = list(group1,group2), coefficients = list(c(0,0,0,0,0,0,0,0,1,0,0,0,0,0),c(0,0,0,0,0,0,0,0,0,0,0,0,1,0)), summaryStat = c("model","mean"), transcripts = "ENSMUST00000106956",genes = NULL,top.n = 6)
+plot_8C <- satuRn::plotDTU(object = satuRn_results, contrast = "C6", groups = list(group1,group2), coefficients = list(c(0,0,0,0,0,0,0,0,1,0,0,0,0,0),c(0,0,0,0,0,0,0,0,0,0,0,0,1,0)), summaryStat = c("model","mean"), transcripts = "ENSMUST00000106956",genes = NULL,top.n = 6)
 
 # get same layout for figure as in paper
 transcript <- "ENSMUST00000106956"
 padj_limma <- format(limmaRes_results[[6]][transcript,"empirical_FDR"],digits=4)
 rank_limma <- txInfo[txInfo$isoform_id == transcript,"rank_limma"]
 
-padj_satuRn <- format(rowData(satuRn_results)[["fitQBResult_C6"]][transcript,"empirical_FDR"],digits=4)
+padj_satuRn <- format(rowData(satuRn_results)[["fitDTUResult_C6"]][transcript,"empirical_FDR"],digits=4)
 rank_satuRn <- txInfo[txInfo$isoform_id == transcript,"rank_satuRn"]
 
 # plot figure 8C
@@ -244,7 +250,7 @@ png("./Results/caseStudy/Figure8C.png",
   units     = "in",
   res       = 200,
   pointsize = 4)
-plot_9C[[1]] +
+plot_8C[[1]] +
   scale_fill_manual(labels = c("ALM","VISp"), values=c("royalblue4", "firebrick")) +
   scale_x_discrete(labels= c("Tnc","Hsd11b1_Endou")) + 
   facet_wrap(~variable, ncol = 1, labeller = labeller(variable = label_facet(factor(transcript), padj_limma, rank_limma, padj_satuRn, rank_satuRn))) + 

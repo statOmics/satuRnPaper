@@ -1,0 +1,161 @@
+---
+title: "4_Chen_S9S10.Rmd"
+author: "Jeroen Gilis"
+date: "08/12/2020"
+output: html_document
+---
+
+This script (4_Chen_S9S10.Rmd) is a seperate script for reproducing figures S9 and S10 from our publication. **In order to run this script (4_Love_DTU_subset.Rmd), the dataset Love_benchmark_datasets_scaledTPM.Rdata (or, alternatively, Love_benchmark_datasets_count.Rdata) is required.** This file can either be generated with the 1_Love_prepare.Rmd script or downloaded from Zenodo.
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+# Load libraries
+
+```{r,message=FALSE,warning=FALSE}
+library(ggplot2)
+library(iCOBRA)
+```
+
+# Load truth file
+
+```{r}
+load(file="./Data/Chen_benchmark_datasets_count.Rdata")
+#load(file="./Data/Chen_benchmark_datasets_scaledTPM.Rdata")
+metaInfo <- c(ChenBenchmarkLenient,ChenBenchmarkStringent)
+rm(ChenBenchmarkLenient,ChenBenchmarkStringent)
+```
+
+# Load DTU performance results
+
+```{r}
+load(file="./Data/Chen_DTU_results_count.Rdata")
+#load(file="./Data/Chen_DTU_results_scaledTPM.Rdata")
+
+ChenBenchmark <- c(
+    ChenDtuBenchmark_satuRn,
+    ChenDtuBenchmark_limmaDiffsplice,
+    ChenDtuBenchmark_DEXSeq,
+    ChenDtuBenchmark_DRIMSeq,
+    ChenDtuBenchmark_edgeRdiffsplice,
+    ChenDtuBenchmark_DoubleExpSeq
+)
+
+### Remove empty entries (due to not tested - aka to many samples for reasonable runtime)
+ChenBenchmark  <- ChenBenchmark[which(
+    sapply(ChenBenchmark, function(x) ! is.null(x$dtuAnalysis)))]
+
+rm(ChenDtuBenchmark_satuRn,
+    ChenDtuBenchmark_limmaDiffsplice,
+    ChenDtuBenchmark_DEXSeq,
+    ChenDtuBenchmark_DRIMSeq,
+    ChenDtuBenchmark_edgeRdiffsplice,
+    ChenDtuBenchmark_DoubleExpSeq)
+invisible(gc())
+```
+
+# Figure S9C
+
+```{r}
+tval <- ChenBenchmark[["satuRn_samples_used_50_rep_3_filterLenient"]]$dtuAnalysis$tvalue
+pval <- ChenBenchmark[["satuRn_samples_used_50_rep_3_filterLenient"]]$dtuAnalysis$p_value_raw
+
+zval <- qnorm(pval/2) * sign(tval)
+zval_mid <- zval[abs(zval) < 10]
+zval_mid <- zval_mid[!is.na(zval_mid)]
+
+png("./Results/Chen_benchmark/figS9C.png",
+    width     = 3.5,
+    height    = 2.5,
+    units     = "in",
+    res       = 300,
+    pointsize = 6) # start export
+plot <- locfdr::locfdr(zval_mid, main = "Chen dataset - 50v50 - edgeR filter - repeat 3")
+dev.off()
+```
+
+# Figure S9D
+
+```{r}
+dataset <- "satuRn_samples_used_50_rep_3_filterLenient"
+Chen_select <- ChenBenchmark[[dataset]]$dtuAnalysis
+truth <- metaInfo[[substr(dataset,8,nchar(dataset))]]$metaInfo
+
+pvalues <- as.data.frame(cbind(Chen_select$p_value_raw,Chen_select$p_value))
+colnames(pvalues) <- c("theoretical_null", "empirical_null")
+rownames(pvalues) <- rownames(Chen_select)
+
+rownames(truth) <- truth$TXNAME
+
+cobra <- COBRAData(pval = pvalues, truth = truth)
+cobra <- calculate_adjp(cobra)
+cobra1perf <- calculate_performance(cobra, binary_truth = "txSwapped", cont_truth = "none", splv = "none", aspects = c("fdrtpr", "fdrtprcurve", "overlap"))
+
+cobraplot <- prepare_data_for_plot(cobra1perf, colorscheme = "Dark2", facetted = TRUE)
+
+new_col <- c(rep(c("black", "grey64", "#999999"),4),rep("white",6))
+names(new_col) <- names(cobraplot@plotcolors)
+cobraplot@plotcolors <- new_col
+
+plot <- plot_fdrtprcurve(cobraplot, xaxisrange = c(0, 0.4), yaxisrange = c(0,1))
+
+plot <- plot + 
+    ggtitle(label="Chen dataset - 50v50 - edgeR filter - repeat 3") +
+    xlab("FDP") +
+    theme(strip.background = element_blank(),
+    strip.text.x = element_blank(),
+    plot.title = element_text(size=10),
+    axis.text.x = element_text(size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_text(size = 10),
+    axis.title.y = element_text(size = 10))
+
+png("./Results/Chen_benchmark/figS9D.png",
+    width = 5.5,
+    height = 4.5,
+    units = "in",
+    res = 200,
+    pointsize = 4) # start export
+print(plot)
+dev.off()
+```
+
+# Figure S10A
+
+```{r}
+data <- ChenBenchmark[["DoubleExpSeq_samples_used_50_rep_3_filterLenient"]]$dtuAnalysis
+
+png("./Results/Chen_benchmark/figS10A.png",
+          width     = 3.5,
+          height    = 2.5,
+          units     = "in",
+          res       = 300,
+          pointsize = 6) # start export
+hist(data$p_value,breaks=40,col="white",main = "Chen dataset - 50v50 - edgeR filter - repeat 3", xlab = "pvalues")
+```
+
+# Figure S10B
+
+```{r}
+direction <- data$sign
+pval <- data$p_value
+
+z <- qnorm(pval/2) * sign(direction)
+z_working <- z[!is.na(z)]
+z_working <- z_working[abs(z_working) < 10]
+
+png("./Results/Chen_benchmark/figS10B.png",
+        width     = 4.5,
+        height    = 3,
+        units     = "in",
+        res       = 500,
+        pointsize = 8)
+current_plot <- suppressWarnings(locfdr::locfdr(z_working, main = "Chen dataset - 50v50 - edgeR filter - repeat 3"))
+dev.off()
+```
+
+
+
+

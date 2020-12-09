@@ -7,7 +7,7 @@ output: html_document
 
 **In order to run this script (1_Love_prepare.Rmd), the folder Love_salmon.zip, which contains the salmon quantification files for this dataset, should be downloaded from Zenodo and unzipped. In addition, the metaData files Love_metadata.rda should also be downloaded from Zenodo. Both files must then be copied into the Data folder of this Github page.** Note that the quantification files were generated from the same reads as those from the paper by Love et al.[swimming downstream](https://doi.org/10.12688/f1000research.15398.3), however, they were quantified with a differrent version of salmon (salmon v1.1.0). The metadata file is an exact copy of the simulate.rda file from the Love et al. dataset.
 
-**If one does not want to run this script, its output can also be downloaded from Zenodo: 02_Love_benchmark_datasets_count.Rdata**
+**If you do not want to run this script, its outputs can also be downloaded from Zenodo: Love_benchmark_datasets_scaledTPM.Rdata (or, alernatively, Love_benchmark_datasets_count.Rdata) and Love_eff_len.Rds**
 
 ```{r setup, include=FALSE, echo=FALSE}
 require("knitr")
@@ -37,12 +37,13 @@ txi <- tximport(files = quant_files, type = "salmon", countsFromAbundance = "no"
 #txi <- tximport(files = quant_files, type = "salmon", countsFromAbundance = "scaledTPM", txOut = TRUE)
 
 myDesign <- data.frame(sample_id = as.character(sample_names),
-                       condition = as.character(rep(c("group1","group2")),each=5))
+                       condition = as.character(rep(c("a","b"),each=12)))
 
 colnames(txi$counts) <- myDesign$sample_id
 ```
 
 # Load metadata
+
 
 ```{r}
 load("./Data/Love_metadata.rda")
@@ -64,7 +65,7 @@ dtu.txps <- txdf$TXNAME[txdf$full.dtu] # Used as the truth in Love et al 2018
 txInfo$geneModified <- txInfo$isoform_id %in% dtu.txps
 ```
 
-# Compute effective transcript leengths for BANDITS
+# Compute effective transcript lengths for BANDITS
 
 ```{r}
 eff_len <- eff_len_compute(x_eff_len = txi$length)
@@ -116,36 +117,159 @@ nrRepList <- split(
 )
 ```
 
-# Generate Love benchmark data
+# Lenient filtering
+
+Note; I do not used the getBenchmark_data.R script here to generate the benchmark datasets as the function deefined in that script still
 
 ```{r}
-source(file="./Performance_benchmarks/getBenchmark_data.R")
+LoveBenchmarkLenient <- lapply(c(1:length(nrRepList)), function(x) {
+      
+    ### Step 1: Extract random sub-sample of correct size
+    set.seed(x)
+    localSampleSize <- nrRepList[[x]]
+      
+    if(TRUE) {
+          
+        samplesToUseCond1 <- sample(myDesign$sample_id[which(myDesign$condition == 'a')], localSampleSize)
+        samplesToUseCond2 <- sample(myDesign$sample_id[which(myDesign$condition == 'b')], localSampleSize)
+        
+        samplesToUseCond1 <- as.character(samplesToUseCond1)
+        samplesToUseCond2 <- as.character(samplesToUseCond2)
+
+        localDesign <- myDesign[which(
+            myDesign$sample_id %in% c(
+                samplesToUseCond1,
+                samplesToUseCond2
+            )
+        ),]
+        }
+
+        ### Step 2: Subset to expressed features using edgeR::filterByExpr
+        if(TRUE) {
+          
+            y <- edgeR::DGEList(counts = txi$counts[,localDesign$sample_id])
+            design <- model.matrix(~condition, data=localDesign)
+            
+            filter <- edgeR::filterByExpr(y,design=design) 
+            
+            localCm <- y$counts[filter,]
+            
+            ## Get only multi-isoform genes (after filtering)
+            localTx <- txInfo[which(
+                txInfo$isoform_id %in% rownames(localCm)),]
+            
+            tmp <- table(localTx$gene_id)
+            tmp <- tmp[which( tmp >= 2)]
+        
+            localTx <- localTx[which(localTx$gene_id %in% names(tmp)),]
+            localCm <- localCm[which(rownames(localCm) %in% localTx$isoform_id),]
+            
+            ## add column with sample size for easy retrieval
+            localTx$nrSamplesPerCondition <- localSampleSize
+        }
+
+        colnames(localTx) <- c('TXNAME','GENEID','gene_modified','nrSamplesPerCondition')
+
+        ### Combine data
+        dataList <- list(
+            data     = localCm,
+            design   = localDesign,
+            metaInfo = localTx
+        )
+        
+        return(dataList)
+    }
+)
+
+names(LoveBenchmarkLenient) <- paste0(names(nrRepList),"_filterLenient")
 ```
 
-```{r}
-LoveBenchmarkLenient <- getBenchmark_data(countData=txi$counts, 
-                                          metaData=txInfo,
-                                          filter="edgeR",
-                                          edgeR_filter_spec = list(min.count = 10, 
-                                                                    min.total.count = 15, 
-                                                                    large.n = 10, 
-                                                                    min.prop = 0.7),
-                                          nrRepList=nrRepList, 
-                                          fracGenesAffected=0.15)
-names(LoveBenchmarkLenient) <- paste0(names(nrRepList),"_filterLenient")
+# Stringent filtering
 
-LoveBenchmarkStringent <- getBenchmark_data(countData=txi$counts,
-                                                metaData=txInfo,
-                                                filter="DRIMSeq", 
-                                                nrRepList=nrRepList, 
-                                                fracGenesAffected=0.15)
+```{r}
+LoveBenchmarkStringent <- lapply(c(1:length(nrRepList)), function(x) {
+      
+    ### Step 1: Extract random sub-sample of correct size
+    set.seed(x)
+    localSampleSize <- nrRepList[[x]]
+      
+    if(TRUE) {
+          
+        samplesToUseCond1 <- sample( myDesign$sample_id[which(myDesign$condition == 'a')], localSampleSize)
+        samplesToUseCond2 <- sample( myDesign$sample_id[which(myDesign$condition == 'b')], localSampleSize)
+        
+        samplesToUseCond1 <- as.character(samplesToUseCond1)
+        samplesToUseCond2 <- as.character(samplesToUseCond2)
+
+        localDesign <- myDesign[which(
+            myDesign$sample_id %in% c(
+                samplesToUseCond1,
+                samplesToUseCond2
+            )
+        ),]
+    }
+    
+    
+
+        ### Step 2: Subset to expressed features using DRIMSeq::dmFilter
+        if(TRUE) {
+          
+          localCm <- txi$counts[,localDesign$sample_id]
+          localCm <- as.data.frame(localCm)
+          colnames(localCm)
+
+          geneForEachTx <- txInfo[match(rownames(localCm),txInfo[,"isoform_id"]),"gene_id"]
+
+          localCm$gene_id <- geneForEachTx
+          localCm$feature_id <- row.names(localCm)
+          
+
+          d <- DRIMSeq::dmDSdata(counts = localCm, samples = localDesign)
+
+          d <- dmFilter(d,
+                min_samps_feature_expr=localSampleSize/2, min_feature_expr=10, min_samps_feature_prop=localSampleSize/2, min_feature_prop=0.1,
+                min_samps_gene_expr=localSampleSize, min_gene_expr=10)
+
+          localCm <- txi$counts[counts(d)$feature_id,localDesign$sample_id]
+
+          ## Get only multi-isoform genes (after filtering)
+          localTx <- txInfo[which(
+              txInfo$isoform_id %in% rownames(localCm)),]
+          
+          tmp <- table(localTx$gene_id)
+          tmp <- tmp[which( tmp >= 2)]
+        
+          localTx <- localTx[which(localTx$gene_id %in% names(tmp)),]
+          localCm <- localCm[which(rownames(localCm) %in% localTx$isoform_id),]
+            
+            
+          ## add column with sample size for easy retrieval
+          localTx$nrSamplesPerCondition <- localSampleSize
+        }
+
+        colnames(localTx) <- c('TXNAME','GENEID','gene_modified','nrSamplesPerCondition')
+
+        ### Combine data
+        dataList <- list(
+            data     = localCm,
+            design   = localDesign,
+            metaInfo = localTx
+        )
+
+        return(dataList)
+    }
+)
+
 names(LoveBenchmarkStringent) <- paste0(names(nrRepList),"_filterStringent")
 ```
 
-# Save Tasic benchmark data
+# Save Love benchmark data
 
 ```{r}
-save(LoveBenchmarkLenient, LoveBenchmarkStringent, file="./Data/02_Love_benchmark_datasets_count.Rdata")
-#save(LoveBenchmarkLenient, LoveBenchmarkStringent, file="./Data/02_Love_benchmark_datasets_scaledTPM.Rdata")
+save(LoveBenchmarkLenient, LoveBenchmarkStringent, file="./Data/Love_benchmark_datasets_count.Rdata")
+#save(LoveBenchmarkLenient, LoveBenchmarkStringent, file="./Data/Love_benchmark_datasets_scaledTPM.Rdata")
 ```
+
+
+
 

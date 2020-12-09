@@ -5,7 +5,9 @@ date: "05/11/2020"
 output: html_document
 ---
 
-**In order to run this script (3_Darmanis_visualize.Rmd), the datasets 02_Darmanis_benchmark_datasets_count.Rdata and 03_Darmanis_DTU_results_count.Rdata are required.** These files can either be generated with the 1_Darmanis_prepare.Rmd and 2_Darmanis_DTU.Rmd scripts, respectively, or downloaded from Zenodo  and put in the data folder of this GitHub repository.
+**In order to run this script (3_Darmanis_visualize.Rmd), the datasets Darmanis_benchmark_datasets_count.Rdata and Darmanis_DTU_results_count.Rdata are required.** These files can either be generated with the 1_Darmanis_prepare.Rmd and 2_Darmanis_DTU.Rmd scripts, respectively, or downloaded from Zenodo  and put in the data folder of this GitHub repository.
+
+The results of this script (FDR-TPR curves) are already available from our GitHub, under the directory ./Results/Darmanis_benchmark/.
 
 ```{r setup, include=FALSE, echo=FALSE}
 require("knitr")
@@ -15,15 +17,15 @@ opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 # Load libraries
 
 ```{r,message=FALSE,warning=FALSE}
-library(tidyverse)
+library(ggplot2)
 library(iCOBRA)
 ```
 
 # Load truth file
 
 ```{r}
-load(file="./Data/02_Darmanis_benchmark_datasets_count.Rdata")
-#load(file="./Data/02_Darmanis_benchmark_datasets_scaledTPM.Rdata")
+load(file="./Data/Darmanis_benchmark_datasets_count.Rdata")
+#load(file="./Data/Darmanis_benchmark_datasets_scaledTPM.Rdata")
 
 metaInfo <- c(DarmanisBenchmarkLenient,DarmanisBenchmarkStringent)
 
@@ -33,8 +35,8 @@ rm(DarmanisBenchmarkLenient,DarmanisBenchmarkStringent)
 # Load DTU performance results
 
 ```{r}
-load(file="./Data/03_Darmanis_DTU_results_count.Rdata")
-#load(file="./Data/03_Darmanis_DTU_results_scaledTPM.Rdata")  
+load(file="./Data/Darmanis_DTU_results_count.Rdata")
+#load(file="./Data/Darmanis_DTU_results_scaledTPM.Rdata")  
 
 DarmanisBenchmark <- c(
     DarmanisDtuBenchmark_satuRn,
@@ -168,7 +170,8 @@ visualize_datasets <- function(dataset,metaInfo,nFilters,nSampleSizes,nRep,nmeth
     
             plot <- plot_fdrtprcurve(cobraplot, xaxisrange = c(0, 0.4), yaxisrange = c(0,0.6))
     
-            titles <- c("20 versus 20 - edgeR filter","20 versus 20 - DRIMSeq filter")
+            titles <- c("20 versus 20 - edgeR filter - count","20 versus 20 - DRIMSeq filter - count")
+            #titles <- c("20 versus 20 - edgeR filter - scaledTPM","20 versus 20 - DRIMSeq filter - scaledTPM")
             current_title <- titles[j]
         } else {
             new_col <- c(rep(c("#56B4E9", "#F0E442", "#0072B2", "black", "#999999"),4),rep("white",10))
@@ -177,7 +180,8 @@ visualize_datasets <- function(dataset,metaInfo,nFilters,nSampleSizes,nRep,nmeth
     
             plot <- plot_fdrtprcurve(cobraplot, xaxisrange = c(0, 0.3), yaxisrange = c(0,0.8))
     
-            titles <- c("50 versus 50 - edgeR filter","100 versus 100 - edgeR filter","50 versus 50 - DRIMSeq filter","100 versus 100 - DRIMSeq filter")
+            titles <- c("50 versus 50 - edgeR filter - count","100 versus 100 - edgeR filter - count","50 versus 50 - DRIMSeq filter - count","100 versus 100 - DRIMSeq filter - count")
+            #titles <- c("50 versus 50 - edgeR filter - scaledTPM","100 versus 100 - edgeR filter - scaledTPM","50 versus 50 - DRIMSeq filter - scaledTPM","100 versus 100 - DRIMSeq filter - scaledTPM")
             current_title <- titles[j]
         }
 
@@ -191,7 +195,7 @@ visualize_datasets <- function(dataset,metaInfo,nFilters,nSampleSizes,nRep,nmeth
             axis.title.x = element_text(size = 10),
             axis.title.y = element_text(size = 10))
 
-      png(paste("./Performance_benchmarks/SingleCell/Darmanis_dataset/Results/FDRTPR_", selection2[j], "_", sub("^[^f]*", "", selection[j]), "_count.png", sep = ""),
+      png(paste("./Results/Darmanis_benchmark/FDRTPR_", selection2[j], "_", sub("^[^f]*", "", selection[j]), "_count.png", sep = ""),
             width     = 5.5,
             height    = 4.5,
             units     = "in",
@@ -199,6 +203,15 @@ visualize_datasets <- function(dataset,metaInfo,nFilters,nSampleSizes,nRep,nmeth
             pointsize = 4) # start export
       print(plot)
       dev.off()
+        
+      # png(paste("./Results/Darmanis_benchmark/FDRTPR_", selection2[j], "_", sub("^[^f]*", "", selection[j]), "_scaledTPM.png", sep = ""),
+      #       width     = 5.5,
+      #       height    = 4.5,
+      #       units     = "in",
+      #       res       = 200,
+      #       pointsize = 4) # start export
+      # print(plot)
+      # dev.off()
   }
 }
 ```

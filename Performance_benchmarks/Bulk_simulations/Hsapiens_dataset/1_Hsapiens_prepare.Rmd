@@ -7,7 +7,7 @@ output: html_document
 
 **In order to run this script (1_Hsapiens_prepare.Rmd), the folder Hsapiens_kallisto.zip, which contains the kallisto quantification files for this dataset, should be downloaded from Zenodo and unzipped. In addition, two metaData files Hsapiens_metadata_1.xlsx, Hsapiens_metadata_2.txt should also be downloaded from Zenodo. All three files must then be copied into the Data folder of this Github page.** 
 
-**If one does not want to run this script, its output can also be downloaded from Zenodo: 02_Hsapiens_benchmark_datasets_count.Rdata**
+**If one does not want to run this script, its output can also be downloaded from Zenodo: Hsapiens_benchmark_datasets_count.Rdata (or, alternatively, Hsapiens_benchmark_datasets_scaledTPM.Rdata)**
 
 ```{r setup, include=FALSE, echo=FALSE}
 require("knitr")
@@ -163,8 +163,8 @@ dim(HsBenchmarkStringent$data)
 # Save Hsapiens benchmark data
 
 ```{r}
-save(HsBenchmarkLenient, HsBenchmarkStringent, file="./Data/02_Hsapiens_benchmark_datasets_count.Rdata")
-# save(HsBenchmarkLenient, HsBenchmarkStringent, file='"./Data/02_Hsapiens_benchmark_datasets_scaledTPM.Rdata")
+save(HsBenchmarkLenient, HsBenchmarkStringent, file="./Data/Hsapiens_benchmark_datasets_count.Rdata")
+#save(HsBenchmarkLenient, HsBenchmarkStringent, file="./Data/Hsapiens_benchmark_datasets_scaledTPM.Rdata")
 ```
 
 

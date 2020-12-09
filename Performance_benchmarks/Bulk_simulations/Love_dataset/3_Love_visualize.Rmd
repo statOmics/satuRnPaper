@@ -1,52 +1,62 @@
 ---
-title: "Love_ECC_visualize"
+title: "3_Love_visualize"
+author: "Jeroen Gilis"
+date: "05/12/2020"
 output: html_document
 ---
 
+**In order to run this script (3_Love_visualize.Rmd), the datasets Love_DTU_results_scaledTPM.Rdata (or, alternatively, Love_DTU_results_count.Rdata) and Love_metadata.rda are required.** These files can either be generated with the 1_Love_prepare.Rmd and 2_Love_DTU.Rmd scripts, or downloaded from Zenodo and put in the data folder of this GitHub repository.
+
+The results of this script (FDR-TPR curves) are already available from our GitHub, under the directory ./Results/Love_benchmark/.
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+# Load libraries
+
 ```{r,message=FALSE}
-library(tidyverse)
+library(ggplot2)
 library(iCOBRA)
 ```
 
-Load data
+# Load DTU performance data
 
 ```{r}
-if(TRUE) {
+#load(file="./Data/Love_DTU_results_scaledTPM.Rdata")
+load(file="./Data/Love_DTU_results_count.Rdata") # to run the visualization on the count data
 
-    #load(file='02_Love_benchmark_DTU_analysis_scaledTPM.Rdata')
-    load(file='02_Love_benchmark_DTU_analysis_count.Rdata')
-  
-    loveBenchmark <- c(
-        loveDtuBenchmark_quasiBinomial,
-        loveDtuBenchmark_DoubleExpSeq,
-        loveDtuBenchmark_limmaDiffsplice,
-        loveDtuBenchmark_edgeRdiffsplice,
-        loveDtuBenchmark_DEXSeq,
-        loveDtuBenchmark_DRIMSeq,
-        loveDtuBenchmark_NBSplice
-    )
-    
-    ### Remove empty enteries (due to not tested - aka to many samples for reasonable runtime)
-    loveBenchmark  <- loveBenchmark[which(
-        sapply(loveBenchmark, function(x) ! is.null(x$dtuAnalysis))
-    )]
-    
-    rm(loveDtuBenchmark_quasiBinomial,
-        loveDtuBenchmark_DoubleExpSeq,
-        loveDtuBenchmark_limmaDiffsplice,
-        loveDtuBenchmark_edgeRdiffsplice,
-        loveDtuBenchmark_DEXSeq,
-        loveDtuBenchmark_DRIMSeq,
-        loveDtuBenchmark_NBSplice)
-    invisible(gc())
-}
+loveBenchmark <- c(
+    loveDtuBenchmark_satuRn,
+    loveDtuBenchmark_DoubleExpSeq,
+    loveDtuBenchmark_limmaDiffsplice,
+    loveDtuBenchmark_edgeRdiffsplice,
+    loveDtuBenchmark_DEXSeq,
+    loveDtuBenchmark_DRIMSeq,
+    loveDtuBenchmark_NBSplice
+)
+
+### Remove empty enteries (due to not tested - aka to many samples for reasonable runtime)
+loveBenchmark  <- loveBenchmark[which(
+    sapply(loveBenchmark, function(x) ! is.null(x$dtuAnalysis))
+)]
+
+rm(loveDtuBenchmark_satuRn,
+    loveDtuBenchmark_DoubleExpSeq,
+    loveDtuBenchmark_limmaDiffsplice,
+    loveDtuBenchmark_edgeRdiffsplice,
+    loveDtuBenchmark_DEXSeq,
+    loveDtuBenchmark_DRIMSeq,
+    loveDtuBenchmark_NBSplice)
+invisible(gc())
 ```
 
-Load and handle truth file
+# Load and wrangle truth file
 
 ```{r}
 # define the truth (copy from swimming downstream paper by Love et al.,F1000Research 2018, 7:952)
-load("simulate.rda")
+load("./Data/Love_metadata.rda")
 txdf <- txdf[match(rownames(tpms), txdf$TXNAME),]
 txdf$dtu.genes <- iso.dtu | iso.dte & !iso.dte.only
 full.dtu.genes <- unique(txdf$GENEID[txdf$dtu.genes])
@@ -57,7 +67,8 @@ txdf$full.dtu <- iso.dtu | (txdf$GENEID %in% dtu.dte.genes & txp.exprs)
 dtu.txps <- txdf$TXNAME[txdf$full.dtu]
 ```
 
-Helper function for visualizing FDR-TPR curves
+# Helper function 
+To get pvalues for the different methods on the different datasets
 
 ```{r}
 get_pvalues <- function(dataset,nrep,nmethods) {
@@ -97,7 +108,7 @@ get_pvalues <- function(dataset,nrep,nmethods) {
 }
 ```
 
-Function for visualizing FDR-TPR curves
+# Visualization function
 
 ```{r}
 visualize_datasets <- function(dataset,nFilters,nSampleSizes,nrep,nmethods) {
@@ -137,7 +148,7 @@ visualize_datasets <- function(dataset,nFilters,nSampleSizes,nrep,nmethods) {
     truth_full_new <- as.data.frame(cbind(rownames(pvalues_full),rep(0,nrow(pvalues_full))))
     colnames(truth_full_new) <- c("TXNAME","truth")
     rownames(truth_full_new) <- truth_full_new$TXNAME
-    truth_full_new$truth <- as.numeric(truth_full_new$truth)
+    truth_full_new$truth <- as.numeric(as.character(truth_full_new$truth))
     truth_full_new[which(sub("\\_.*", "", truth_full_new$TXNAME) %in% dtu.txps),"truth"] <- 1
 
     # plot FDR-TPR with iCOBRA
@@ -153,7 +164,8 @@ visualize_datasets <- function(dataset,nFilters,nSampleSizes,nrep,nmethods) {
   
     plot_full <- plot_fdrtprcurve(cobraplot, xaxisrange = c(0, 0.35), yaxisrange = c(0,0.85))
     
-    titles <- c("3 versus 3 - edgeR filter - scaledTPM","6 versus 6 - edgeR filter - scaledTPM","10 versus 10 - edgeR filter - scaledTPM","3 versus 3 - DRIMSeq filter - scaledTPM","6 versus 6 - DRIMSeq filter - scaledTPM","10 versus 10 - DRIMSeq filter - scaledTPM")
+    #titles <- c("3 versus 3 - edgeR filter - scaledTPM","6 versus 6 - edgeR filter - scaledTPM","10 versus 10 - edgeR filter - scaledTPM","3 versus 3 - DRIMSeq filter - scaledTPM","6 versus 6 - DRIMSeq filter - scaledTPM","10 versus 10 - DRIMSeq filter - scaledTPM")
+    titles <- c("3 versus 3 - edgeR filter - count","6 versus 6 - edgeR filter - count","10 versus 10 - edgeR filter - count","3 versus 3 - DRIMSeq filter - count","6 versus 6 - DRIMSeq filter - count","10 versus 10 - DRIMSeq filter - count")
     current_title <- titles[j]
 
     plot_full <- plot_full + 
@@ -166,7 +178,7 @@ visualize_datasets <- function(dataset,nFilters,nSampleSizes,nrep,nmethods) {
             axis.title.x = element_text(size = 10),
             axis.title.y = element_text(size = 10))
     
-    png(paste("/Users/jg/Desktop/PhD/DTU_project/Github/dtuPaper/Results/Love_ECC_benchmark/plot_icobra_count", j, ".png", sep = ""),
+    png(paste("./Results/Love_benchmark/FDRTPR_scaledTPM_", j, ".png", sep = ""),
           width     = 5.5,
           height    = 4.5,
           units     = "in",
@@ -174,11 +186,20 @@ visualize_datasets <- function(dataset,nFilters,nSampleSizes,nrep,nmethods) {
           pointsize = 4) # start export
     print(plot_full)
     dev.off()
+    
+    # png(paste("./Results/Love_benchmark/FDRTPR_count_", j, ".png", sep = ""),
+    #       width     = 5.5,
+    #       height    = 4.5,
+    #       units     = "in",
+    #       res       = 200,
+    #       pointsize = 4) # start export
+    # print(plot_full)
+    # dev.off()
   }
 }
 ```
 
-Visualize FDR-TPR curves
+# Generate FDR-TPR curves
 
 ```{r}
 visualize_datasets(dataset=loveBenchmark,
@@ -187,3 +208,5 @@ visualize_datasets(dataset=loveBenchmark,
                    nrep=3,
                    nmethods=7)
 ```
+
+

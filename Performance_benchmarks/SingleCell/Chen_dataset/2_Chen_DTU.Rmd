@@ -5,9 +5,11 @@ date: "05/11/2020"
 output: html_document
 ---
 
-**In order to run this script (2_Chen_DTU.Rmd), the dataset 02_Chen_benchmark_datasets_count.Rdata is required.** This file can either be generated with the 1_Chen_prepare.Rmd script or downloaded from Zenodo.
+**In order to run this script (2_Chen_DTU.Rmd), the dataset Chen_benchmark_datasets_count.Rdata (or, alternatively, Chen_benchmark_datasets_count.Rdata) is required.** This file can either be generated with the 1_Chen_prepare.Rmd script or downloaded from Zenodo.
 
-Here we run the DTU analyses for all 6 methods on all (12) Chen benchmark datasets. Note that for DEXSeq and DRIMSeq we only run the datasets with 20 cells in each group, as these methods do not scale to large datasets. NBSplice was omitted as it does not converge on datasets with many zeroes. This code runs approximately 8 hours on a MacBook Pro 2018, processor; 2,3 GHz Quad-Core Intel Core i5, 16GB RAM. Most of this runtime was attributed to the DEXSeq and DRIMSeq analyses.
+Here we run the DTU analyses for all 6 methods on all (12) Chen benchmark datasets. Note that for DEXSeq and DRIMSeq we only run the datasets with 20 cells in each group, as these methods do not scale to large datasets. NBSplice was omitted as it does not converge on datasets with many zeroes. This code runs approximately 1.5 hours on a MacBook Pro 2018, processor; 2,3 GHz Quad-Core Intel Core i5, 16GB RAM. Most of this runtime was attributed to the DEXSeq and DRIMSeq analyses.
+
+**If you do not want to run this script, its output can also be downloaded from Zenodo: Chen_DTU_results_count.Rdata (or, alternatively, Chen_DTU_results_scaledTPM.Rdata) **
 
 ```{r setup, include=FALSE, echo=FALSE}
 require("knitr")
@@ -34,6 +36,8 @@ source(file="./Performance_benchmarks/DTU_methods.R")
 
 # Set up parallel execution
 
+Note that the optimal parameter setting for parallelizing the DTU analyses depends on your specific computing system.
+
 ```{r}
 if(TRUE) {
     nrCores <- 2
@@ -53,12 +57,12 @@ if(TRUE) {
 # Run all analyses 
 
 Run the DTU analyses for all 6 methods on all (12) Chen benchmark datasets. Note that for DEXSeq and DRIMSeq we only run the datasets with 20 cells in each group, as these methods do not scale to large datasets. NBSplice was omitted as it does not converge on datasets with many zeroes.
-This code runs approximately 8 hours on a MacBook Pro 2018, processor; 2,3 GHz Quad-Core Intel Core i5, 16GB RAM. Most of this runtime was attributed to the DEXSeq and DRIMSeq analyses.
+This code runs approximately 1.5 hours on a MacBook Pro 2018, processor; 2,3 GHz Quad-Core Intel Core i5, 16GB RAM. Most of this runtime was attributed to the DEXSeq and DRIMSeq analyses.
 
 ```{r}
 ### Load benchmark data
-load(file="./Data/02_Chen_benchmark_datasets_count.Rdata")
-#load(file='"./Data/02_Chen_benchmark_datasets_scaledTPM.Rdata") 
+#load(file="./Data/Chen_benchmark_datasets_count.Rdata")
+load(file="./Data/Chen_benchmark_datasets_scaledTPM.Rdata") 
 
 ### Combine
 ChenBenchmarkData <- c(ChenBenchmarkLenient,ChenBenchmarkStringent)
@@ -244,7 +248,7 @@ save(
     ChenDtuBenchmark_DRIMSeq,
     ChenDtuBenchmark_edgeRdiffsplice,
     ChenDtuBenchmark_DoubleExpSeq,
-    file="./Data/03_Chen_DTU_results_count.Rdata")
+    file="./Data/Chen_DTU_results_count.Rdata")
 
 # save(
 #     ChenDtuBenchmark_satuRn,
@@ -253,9 +257,8 @@ save(
 #     ChenDtuBenchmark_DRIMSeq,
 #     ChenDtuBenchmark_edgeRdiffsplice,
 #     ChenDtuBenchmark_DoubleExpSeq,
-#     file="./Data/03_Chen_DTU_results_count.Rdata")
+#     file="./Data/Chen_DTU_results_scaledTPM.Rdata")
 ```
-
 
 
 

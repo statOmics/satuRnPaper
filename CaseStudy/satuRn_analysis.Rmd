@@ -5,6 +5,15 @@ date: "11/11/2020"
 output: html_document
 ---
 
+This is scripts performs a DTU analysis with satuRn on a subset of cells from the single-cell RNA-Seq dataset by Tasic et al. [Tasic paper](https://doi.org/10.1038/s41586-018-0654-5). In order to run this script, three files should be downloaded from Zenodo and placed in the data folder of this GitHub repository;
+
+1. Tasic_caseStudy_transcript_counts.Rds (transcript-level expression matrix)
+2. Tasic_metadata_1.xlsx
+3. Tasic_metadata_2.csv
+
+Note that the metadata files are identical to the one supplemented by Tasic et al., Supplementary_Table_10_Full_Metadata.xlsx and GSE115746_accession_table.csv, respectively. All figures generated in this script are available from our GitHub repository under ./Results/CaseStudy/
+
+
 ```{r setup, include=FALSE, echo=FALSE}
 require("knitr")
 opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
@@ -21,7 +30,7 @@ library(openxlsx)
 # for analysis
 library(satuRn)
 library(edgeR)
-library(tidyverse)
+#library(tidyverse)
 library(SummarizedExperiment)
 
 # for visualization
@@ -138,18 +147,19 @@ Make a summarized experiment object
 
 ```{r, message=F}
 sumExp <- SummarizedExperiment::SummarizedExperiment(assays=list(counts=Tasic_counts), colData = metaData, rowData = txInfo)
-metadata(sumExp)$formula <- ~ 0 + group  # specify design, internally the fit function will then use design <- model.matrix(sumExp@metadata$formula, colData(sumExp))
+#metadata(sumExp)$formula <- ~ 0 + group  # specify design, internally the fit function will then use design <- model.matrix(sumExp@metadata$formula, colData(sumExp))
 ```
 
 ## Fit quasi-binomial GLMs with satuRn
 
 ```{r}
 Sys.time()
-sumExp <- satuRn::fitQB(object = sumExp,
-                       parallel = TRUE,
-                       BPPARAM = BiocParallel::bpparam(),
-                       verbose = TRUE
-                      )
+sumExp <- satuRn::fitDTU(object = sumExp,
+                         formula = ~ 0 + group,
+                         parallel = FALSE,
+                         BPPARAM = BiocParallel::bpparam(),
+                         verbose = TRUE
+                         )
 Sys.time()
 ```
 
@@ -182,7 +192,7 @@ sumExp <- satuRn::testDTU(object = sumExp, contrasts = L, plot=T, sort = F)
 
 ```{r}
 # now the rowdata have 8 additional slots, corresponding to the 8 different requested contrasts. This is a simple dataframe with results for each transcripts in the selected contrast.
-rowData(sumExp)[["fitQBResult_C6"]]
+rowData(sumExp)[["fitDTUResult_C6"]]
 ```
 
 # Visualize DTU with satuRn
@@ -241,7 +251,7 @@ sink()
 
 # Save final object
 
-Save resulting object for later comparison of results with limma diffsplice and DoubleExpSeq
+Save resulting object for later comparison of results with limma diffsplice and DoubleExpSeq.
 
 ```{r}
 saveRDS(sumExp, file = "./Data/Tasic_caseStudy_satuRn.Rds")
