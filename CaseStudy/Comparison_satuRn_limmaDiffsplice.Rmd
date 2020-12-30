@@ -10,7 +10,7 @@ This is scripts performs qualitative comparison between the results of the DTU a
 1. Tasic_caseStudy_satuRn.Rds (satuRn DTU results)
 2. Tasic_caseStudy_limmaDiffsplice.Rds (limma diffsplice DTU results)
 
-Note that the metadata files are identical to the one supplemented by Tasic et al., Supplementary_Table_10_Full_Metadata.xlsx and GSE115746_accession_table.csv, respectively. All figures generated in this script are available from our GitHub repository under ./Results/CaseStudy/
+All figures generated in this script are available from our GitHub repository under ./Results/CaseStudy/
 
 ```{r setup, include=FALSE, echo=FALSE}
 require("knitr")
@@ -23,7 +23,6 @@ opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 library(SummarizedExperiment)
 library(satuRn)
 library(ggplot2)
-#library(tidyverse)
 ```
 
 # Load data
@@ -103,20 +102,28 @@ gg_data$method <- factor(gg_data$method, levels = c("satuRn","both","limmaDiffsp
 Make plot of gene-level count of the transcripts uniquely identified as DTU by satuRn or limma diffsplice, or by both methods.
 
 ```{r}
+p <- ggplot(data = gg_data[-which(gg_data$method == "none"),], aes(x=method,y=totalCount,fill=method)) +
+  geom_boxplot() +
+  theme_classic() +
+  scale_fill_manual(values=c("black","grey84","#0072B2")) +
+  ylab("gene-level count") +
+  ggtitle("Average gene-level counts of DTU transcripts") +
+  theme(plot.title = element_text(size = 10))
+
+dat <- ggplot_build(p)$data[[1]]
+
 png("./Results/caseStudy/Figure7A.png",
   width     = 4.5,
   height    = 3.5,
   units     = "in",
   res       = 400,
   pointsize = 4)
-ggplot(data = gg_data[-which(gg_data$method == "none"),], aes(x=method,y=totalCount,fill=method)) +
-  geom_boxplot() +
-  scale_y_log10() +
-  theme_classic() +
-  scale_fill_manual(values=c("black","grey84","#0072B2")) +
-  ylab("gene-level count") +
-  ggtitle("Average gene-level counts of DTU transcripts") +
-  theme(plot.title = element_text(size = 10))
+p + geom_segment(data=dat, 
+                 aes(x=xmin, xend=xmax, y=middle, yend=middle), 
+                 inherit.aes = F,
+                 colour=c("white","black","black"), 
+                 size=1) + 
+    scale_y_log10()
 dev.off()
 ```
 
@@ -139,8 +146,8 @@ ggplot(data = gg_data[-which(gg_data$method == "none"),], aes(x=method,y=frac_no
   scale_color_manual(values=c("grey60","black","black")) +
   ylim(0,1) +
   ggtitle("Fraction of non-zero counts in DTU transcripts") +
-  stat_summary(fun=median, geom="point", shape=18, size=5, col="darkgreen") +
-  ylab("fraction_non_zero")  +
+  stat_summary(fun=median, geom="point", shape=18, size=5, col="green4") +
+  ylab("fraction non-zero counts")  +
   theme(plot.title = element_text(size = 10))
 dev.off()
 ```
