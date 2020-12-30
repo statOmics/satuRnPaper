@@ -88,6 +88,7 @@ Uncomment this chunk of code if scaledTPM expression values need to be obained i
 
 ```
 colsums_count <- colSums(gtexCm)
+colsums_count <- readRDS("./Data/colsums_count.Rds")
 rm("gtexCm")
 invisible(gc())
 gtexTPM <- fread('./Data/GTEx_scaledTPM.gz', data.table = FALSE)
@@ -103,7 +104,7 @@ scale_factors <- colsums_count/colsums_TPM
 gtexScaledTPM <- as.matrix(gtexTPM) %*% diag(scale_factors) # scaledTPM input
 gtexScaledTPM <- as.data.frame(gtexScaledTPM)
 colnames(gtexScaledTPM) <- colnames(gtexTPM)
-#rownames(gtexScaledTPM) <- txInfo$isoform_id
+rownames(gtexScaledTPM) <- txInfo$isoform_id
 gtexCm <- gtexScaledTPM
 ```
 
@@ -174,7 +175,7 @@ names(gtexBenchmarkDataStringent) <- paste0(names(nrRepList),"_filterStringent")
 # Save gtex benchmark data
 
 ```{r}
-save(gtexBenchmarkDataLenient, gtexBenchmarkDataStringent, file="./Data/GTEx_benchmark_datasets_count.Rdata")
+#save(gtexBenchmarkDataLenient, gtexBenchmarkDataStringent, file="./Data/GTEx_benchmark_datasets_count.Rdata")
 save(gtexBenchmarkDataLenient, gtexBenchmarkDataStringent, file="./Data/GTEx_benchmark_datasets_scaledTPM.Rdata")
 ```
 

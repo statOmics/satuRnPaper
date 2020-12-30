@@ -41,7 +41,7 @@ source(file="./Performance_benchmarks/DTU_methods.R")
 
 Note that the optimal parameter setting for parallelizing the DTU analyses depends on your specific computing system.
 
-```{r}
+```
 nrCores <- 2
 
 if(nrCores != 1) {
@@ -61,8 +61,8 @@ This code runs approximately 4 hours on a MacBook Pro 2018, processor; 2,3 GHz Q
 
 ```{r}
 ### Load the benchmark datasets, which are output from 1_Gtex_prepare.Rmd
-load(file="./Data/GTEx_benchmark_datasets_count.Rdata")
-#load(file="./Data/GTEx_benchmark_datasets_scaledTPM.Rdata")
+#load(file="./Data/GTEx_benchmark_datasets_count.Rdata")
+load(file="./Data/GTEx_benchmark_datasets_scaledTPM.Rdata")
 
 gtexBenchmarkData <- c(gtexBenchmarkDataLenient,gtexBenchmarkDataStringent)
 
@@ -170,7 +170,13 @@ gtexDtuBenchmark_edgeRdiffsplice <- plyr::llply(
     }
 )
 difftime(Sys.time(), tStart)
-    
+ 
+
+
+
+
+
+   
 print("start DEXSeq")
 
 tStart <- Sys.time()
@@ -280,15 +286,6 @@ names(gtexDtuBenchmark_DRIMSeq) <- paste0('DRIMSeq_', names(gtexDtuBenchmark_DRI
 names(gtexDtuBenchmark_NBSplice) <- paste0('NBSplice_', names(gtexDtuBenchmark_NBSplice))
 
 ### Save result
-save(gtexDtuBenchmark_satuRn,
-    gtexDtuBenchmark_limmaDiffsplice,
-    gtexDtuBenchmark_edgeRdiffsplice,
-    gtexDtuBenchmark_DoubleExpSeq,
-    gtexDtuBenchmark_DEXSeq,
-    gtexDtuBenchmark_DRIMSeq,
-    gtexDtuBenchmark_NBSplice,
-    file="./Data/GTEx_DTU_results_count.Rdata")
-
 # save(gtexDtuBenchmark_satuRn,
 #     gtexDtuBenchmark_limmaDiffsplice,
 #     gtexDtuBenchmark_edgeRdiffsplice,
@@ -296,7 +293,24 @@ save(gtexDtuBenchmark_satuRn,
 #     gtexDtuBenchmark_DEXSeq,
 #     gtexDtuBenchmark_DRIMSeq,
 #     gtexDtuBenchmark_NBSplice,
-#     file="./Data/GTEx_DTU_results_scaledTPM.Rdata")
+#     file="./Data/GTEx_DTU_results_count.Rdata")
+
+save(gtexDtuBenchmark_satuRn,
+    gtexDtuBenchmark_limmaDiffsplice,
+    gtexDtuBenchmark_edgeRdiffsplice,
+    gtexDtuBenchmark_DoubleExpSeq,
+    gtexDtuBenchmark_DEXSeq,
+    gtexDtuBenchmark_DRIMSeq,
+    gtexDtuBenchmark_NBSplice,
+    file="./Data/GTEx_DTU_results_scaledTPM.Rdata")
 ```
+
+
+
+
+
+
+
+
 
 

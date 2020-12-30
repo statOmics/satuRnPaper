@@ -216,8 +216,8 @@ names(colors) <- c("DEXSeq","DoubleExpSeq","DRIMSeq","edgeR_diffsplice", "limma_
 
 methods <- c("DEXSeq","DoubleExpSeq","DRIMSeq","edgeR_diffsplice", "limma_diffsplice" ,"NBSplice","satuRn")
 
-titles <- c("5 versus 5 - edgeR filter - count","20 versus 20 - edgeR filter - count","5 versus 5 - DRIMSeq filter - count","20 versus 20 - DRIMSeq filter - count")
-#titles <- c("5 versus 5 - edgeR filter - scaledTPM","20 versus 20 - edgeR filter - scaledTPM","5 versus 5 - DRIMSeq filter - scaledTPM","20 versus 20 - DRIMSeq filter - scaledTPM")
+#titles <- c("5 versus 5 - edgeR filter - count","20 versus 20 - edgeR filter - count","5 versus 5 - DRIMSeq filter - count","20 versus 20 - DRIMSeq filter - count")
+titles <- c("5 versus 5 - edgeR filter - scaledTPM","20 versus 20 - edgeR filter - scaledTPM","5 versus 5 - DRIMSeq filter - scaledTPM","20 versus 20 - DRIMSeq filter - scaledTPM")
 
 visualize_datasets(dataset=gtexBenchmark,
                    metaInfo=metaInfo,
@@ -235,8 +235,8 @@ names(colors) <- c("DoubleExpSeq","edgeR_diffsplice", "limma_diffsplice","satuRn
 
 methods <- c("DoubleExpSeq","edgeR_diffsplice", "limma_diffsplice","satuRn")
 
-titles <- c("50 versus 50 - edgeR filter - count","50 versus 50 - DRIMSeq filter - count")
-#titles <- c("50 versus 50 - edgeR filter - scaledTPM","50 versus 50 - DRIMSeq filter - scaledTPM")
+#titles <- c("50 versus 50 - edgeR filter - count","50 versus 50 - DRIMSeq filter - count")
+titles <- c("50 versus 50 - edgeR filter - scaledTPM","50 versus 50 - DRIMSeq filter - scaledTPM")
 
 visualize_datasets(dataset=gtexBenchmark,
                    metaInfo=metaInfo,
