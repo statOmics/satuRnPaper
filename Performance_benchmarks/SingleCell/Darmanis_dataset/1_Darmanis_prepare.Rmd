@@ -5,7 +5,9 @@ date: "05/11/2020"
 output: html_document
 ---
 
-**In order to run this script (1_Darmanis_perpare.Rmd), the expression count matrix Darmanis_counts.rds and corresponding metadata Darmanis_metadata.Rdata should be downloaded from Zenodo and put in the Data folder of this GitHub repository.** Alternatively, the exact same quantification files can be downloaded from their original source: http://imlspenticton.uzh.ch/robinson_lab/conquer/data-mae/GSE84465.rds .
+**In order to run this script (1_Darmanis_perpare.Rmd), the expression count matrix Darmanis_counts.rds and corresponding metadata Darmanis_metadata.Rdata should be downloaded from Zenodo and put in the Data folder of this GitHub repository.**
+
+Alternatively, the exact same quantification files can be downloaded from their original source: http://imlspenticton.uzh.ch/robinson_lab/conquer/data-mae/GSE84465.rds . Note that the raw data is available through [GEO](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE84465)
 
 **If one does not want to run this script, its output can also be downloaded from Zenodo: Darmanis_benchmark_datasets_count.Rdata (or, alternatively, Darmanis_benchmark_datasets_scaledTPM.Rdata) **
 

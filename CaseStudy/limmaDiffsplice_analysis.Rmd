@@ -11,7 +11,9 @@ This is scripts performs a DTU analysis with limma diffsplice on a subset of cel
 2. Tasic_metadata_1.xlsx
 3. Tasic_metadata_2.csv
 
-Note that the metadata files are identical to the one supplemented by Tasic et al., Supplementary_Table_10_Full_Metadata.xlsx and GSE115746_accession_table.csv, respectively. All figures generated in this script are available from our GitHub repository under ./Results/CaseStudy/
+Note that the metadata files are identical to the one supplemented by Tasic et al., Supplementary_Table_10_Full_Metadata.xlsx and GSE115746_accession_table.csv, respectively. Also note that the raw data is available through [GEO](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE115746).
+
+All figures generated in this script are available from our GitHub repository under ./Results/CaseStudy/
 
 ```{r setup, include=FALSE, echo=FALSE}
 require("knitr")

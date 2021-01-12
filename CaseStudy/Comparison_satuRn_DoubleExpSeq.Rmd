@@ -10,7 +10,7 @@ This is scripts performs qualitative comparison between the results of the DTU a
 1. Tasic_caseStudy_satuRn.Rds (satuRn DTU results)
 2. Tasic_caseStudy_DoubleExpSeq.Rds (DoubleExpSeq DTU results)
 
-Note that the metadata files are identical to the one supplemented by Tasic et al., Supplementary_Table_10_Full_Metadata.xlsx and GSE115746_accession_table.csv, respectively. All figures generated in this script are available from our GitHub repository under ./Results/CaseStudy/
+All figures generated in this script are available from our GitHub repository under ./Results/CaseStudy/
 
 ```{r setup, include=FALSE, echo=FALSE}
 require("knitr")

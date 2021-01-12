@@ -17,6 +17,8 @@ Note that these files are identical to the ones from the links above; we have on
 2. https://storage.googleapis.com/gtex_analysis_v8/annotations/GTEx_Analysis_v8_Annotations_SampleAttributesDS.txt
 3. https://storage.googleapis.com/gtex_analysis_v8/rna_seq_data/GTEx_Analysis_2017-06-05_v8_RSEMv1.3.0_transcript_tpm.gct.gz
 
+Note that the raw data (e.g. .bam files) can also be acquired through [the GTEx data portal](https://www.gtexportal.org/home/documentationPage#staticTextPublicationPolicy)  
+
 **If you do not want to run this script, its output can also be downloaded from Zenodo: GTEx_benchmark_datasets_count.Rdata (or, alternatively, GTEx_benchmark_datasets_scaledTPM.Rdata) **
 
 Given the large datasets, this script is quite memory intensive!

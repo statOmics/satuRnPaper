@@ -5,7 +5,9 @@ date: "05/11/2020"
 output: html_document
 ---
 
-**In order to run this script (1_Tasic_perpare.Rmd), the expression count matrix Tasic_counts.Rds (or, alternatively, Tasic_scaledTPM.Rds) should be downloaded from Zenodo. In addition, two metaData files Tasic_metadata_1.xlsx, Tasic_metadata_2.csv should also be downloaded from Zenodo. All three files must then be copied into the Data folder of this Github page**. Note that the metadata files are identical to the one supplemented in the paper by Tasic et al. [Tasic paper](https://doi.org/10.1038/s41586-018-0654-5), Supplementary_Table_10_Full_Metadata.xlsx and GSE115746_accession_table.csv, respectively.
+**In order to run this script (1_Tasic_perpare.Rmd), the expression count matrix Tasic_counts.Rds (or, alternatively, Tasic_scaledTPM.Rds) should be downloaded from Zenodo. In addition, two metaData files Tasic_metadata_1.xlsx, Tasic_metadata_2.csv should also be downloaded from Zenodo. All three files must then be copied into the Data folder of this Github page**. 
+
+Note that the metadata files are identical to the one supplemented in the paper by Tasic et al. [Tasic paper](https://doi.org/10.1038/s41586-018-0654-5), Supplementary_Table_10_Full_Metadata.xlsx and GSE115746_accession_table.csv, respectively. Also note that the raw data is available through [GEO](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE115746)
 
 **If you do not want to run this script, its output can also be downloaded from Zenodo: Tasic_benchmark_datasets_count.Rdata (or, alternatively, Tasic_benchmark_datasets_scaledTPM.Rdata) **
 

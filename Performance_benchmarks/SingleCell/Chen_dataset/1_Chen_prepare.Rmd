@@ -7,6 +7,8 @@ output: html_document
 
 **In order to run this script (1_Chen_perpare.Rmd), the corresponding expression count file Chen_counts.Rds (or, alternatively, Chen_scaledTPM.Rds) be downloaded from Zenodo. In addition, the metaData Chen_metadata.csv should also be downloaded from Zenodo. Both files must then be copied into the Data folder of this Github page**.
 
+Note that the raw data is available through [GEO](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE74155)
+
 **If one does not want to run this script, its output can also be downloaded from Zenodo: Chen_benchmark_datasets_count.Rdata (or, alternatively, Chen_benchmark_datasets_scaledTPM.Rdata) **
 
 ```{r setup, include=FALSE, echo=FALSE}
