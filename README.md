@@ -27,7 +27,7 @@ To our knowledge, satuRn is the only DTU analysis method that combines all of th
 
 satuRn adopts a quasi-binomial generalized linear model framework. satuRn provides direct inference on DTU by modelling the relative usage of a transcript, in comparison to other transcripts from the same gene, between conditions of interest. To stabilize the estimation of the overdispersion parameter of the QB model, we borrow strength across transcripts by building upon the empirical Bayes methodology as introduced by Smyth et al. In order to control the number of false positive findings, an empirical null distribution is used to obtain the p-values, which are corrected for multiple testing with the FDR method of Benjamini and Hochberg. 
 
-satuRn is implemented as an R software package and is available on Github from INSERT LINK TO PACKAGE.
+satuRn is implemented as an R software package and is available on Github from https://github.com/statOmics/satuRn.
 
 ***
 
