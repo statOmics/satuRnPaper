@@ -33,7 +33,7 @@ satuRn is implemented as an R software package and is available on Github from h
 
 ### Availability of data
 
-The datasets required to reproduce all results that are displayed in this publication (including supplementary materials) are available at Zenodo. This includes both the raw data and intermediate results. Note that at the top of each analysis script it is indicated which dataset is required as input for the script; it may thus not be necessary to download all datasets from [Zenodo](https://doi.org/10.5281/zenodo.4438789). For easily reproducing the results, place the downloaded data in the Data folder of this repository.
+The datasets required to reproduce all results that are displayed in this publication (including supplementary materials) are available at Zenodo. This includes both the raw data and intermediate results. Note that at the top of each analysis script it is indicated which dataset is required as input for the script; it may thus not be necessary to download all datasets from [Zenodo](https://doi.org/10.5281/zenodo.4439415). For easily reproducing our analyses, place the downloaded data in the `Data` folder of your local clone of this repository.
 
 ***
 
