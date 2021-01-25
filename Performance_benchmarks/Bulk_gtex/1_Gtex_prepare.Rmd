@@ -5,7 +5,7 @@ date: "02/11/2020"
 output: html_document
 ---
 
-**In order to run this script (1_Gtex_perpare.Rmd), two files should be downloaded from Zenodo and copied into the Data folder from this Github page**. Note that if you want to run the analysis on scaledTPM expression values, you must also copy a third file from Zenodo into the Data folder from this Github page
+**In order to run this script (1_Gtex_prepare.Rmd), two files should be downloaded from Zenodo and copied into the Data folder from this Github page**. Note that if you want to run the analysis on scaledTPM expression values, you must also copy a third file from Zenodo into the Data folder from this Github page
 
 1. GTEx_counts.gz 
 2. 01_GTEx_baseline_metadata.txt
