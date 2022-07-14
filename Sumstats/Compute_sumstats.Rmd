@@ -1,0 +1,707 @@
+---
+title: "Compute summary statistics for the different datasets"
+author: "Jeroen Gilis"
+date: "09/07/2022"
+output:
+  html_document:
+    code_download: yes
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+    highlight: tango
+    number_sections: yes
+  pdf_document:
+    toc: yes
+---
+
+In this script, we **compute** several summary statistics and characteristics of
+the four real RNA-seq datasets that were used in this manuscript; the GTEx bulk 
+dataset and the scRNA-seq datasets from Tasic et al., Chen et al. and Darmanis 
+et al. The data generated in this script were used to generate supplementary 
+supplementary table S1 from the manuscript.
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+```{r, message=FALSE, warning=FALSE}
+library(MultiAssayExperiment)
+library(data.table)
+library(purrr)
+```
+
+# Function to compute summary statistics
+
+Function to compute three summary statistics:
+
+```{r}
+sumstats <- function(counts, tx2gene){
+    
+    # sumstat 1: number of transcripts
+    sumstat1 <- nrow(counts)
+  
+    # sumstat 2: overall percentage zeroes
+    sumstat2 <- sum(counts==0)/(sum(counts==0)+sum(counts!=0))
+    
+    ## split counts in list per gene
+    transcript_counts_gene_id <- tx2gene$GENEID[match(rownames(counts), tx2gene$TXNAME)]
+    transcript_split_by_gene <- split(data.frame(counts), transcript_counts_gene_id)
+    
+    # sumstat 3: percentage binary per cell
+    # sumstat 4: percentage all zero per cell
+    sumstat_binary_allzero <- function(count_per_gene){
+        count_per_gene_binary <- count_per_gene
+        count_per_gene_binary[count_per_gene_binary>0] <- 1
+        
+        binary <- sum(colSums(count_per_gene_binary) == 1)
+        allzero <- sum(colSums(count_per_gene_binary) == 0)
+        return(c(binary, allzero))
+    }
+    
+    sumstats34 <- lapply(seq_along(transcript_split_by_gene), function(i) 
+                sumstat_binary_allzero(count_per_gene = transcript_split_by_gene[[i]]))
+    
+    sumstat3 <- unlist(map(sumstats34, 1))
+    sumstat4 <- unlist(map(sumstats34, 2))
+    
+    sumstat3 <- mean(sumstat3)/ncol(counts)
+    sumstat4 <- mean(sumstat4)/ncol(counts)
+    
+    return(list("n_transcripts" = sumstat1,
+                "overall_zero" = sumstat2, 
+                "binary" = sumstat3, 
+                "all_zero" = sumstat4))
+}
+```
+
+# Tasic dataset
+
+## Filtered data
+
+Compute summary statistics for the Tasic dataset as it was used in the 
+performance benchmark study. We do this for the smallest (20v20) and 
+largest (200v200) subsets of the data and for all three repeats. 
+
+```{r}
+load("./Data/Tasic_benchmark_datasets_count.Rdata")
+
+## Lenient edgeR filter, 20v20
+Tasic_lenient_20v20_1 <- sumstats(counts = TasicBenchmarkLenient$samples_used_20_rep_1_filterLenient$data, 
+                                  tx2gene  = TasicBenchmarkLenient$samples_used_20_rep_1_filterLenient$metaInfo)
+
+Tasic_lenient_20v20_2 <- sumstats(counts = TasicBenchmarkLenient$samples_used_20_rep_2_filterLenient$data, 
+                                  tx2gene  = TasicBenchmarkLenient$samples_used_20_rep_2_filterLenient$metaInfo)
+
+Tasic_lenient_20v20_3 <- sumstats(counts = TasicBenchmarkLenient$samples_used_20_rep_3_filterLenient$data, 
+                                  tx2gene  = TasicBenchmarkLenient$samples_used_20_rep_3_filterLenient$metaInfo)
+
+## Lenient edgeR filter, 200v200
+Tasic_lenient_200v200_1 <- sumstats(counts = TasicBenchmarkLenient$samples_used_200_rep_1_filterLenient$data, 
+                                  tx2gene  = TasicBenchmarkLenient$samples_used_200_rep_1_filterLenient$metaInfo)
+
+Tasic_lenient_200v200_2 <- sumstats(counts = TasicBenchmarkLenient$samples_used_200_rep_2_filterLenient$data, 
+                                  tx2gene  = TasicBenchmarkLenient$samples_used_200_rep_2_filterLenient$metaInfo)
+
+Tasic_lenient_200v200_3 <- sumstats(counts = TasicBenchmarkLenient$samples_used_200_rep_3_filterLenient$data, 
+                                  tx2gene  = TasicBenchmarkLenient$samples_used_200_rep_3_filterLenient$metaInfo)
+
+## Stringent DRIMSeq filter, 20v20
+Tasic_stringent_20v20_1 <- sumstats(counts = TasicBenchmarkStringent$samples_used_20_rep_1_filterStringent$data, 
+                                  tx2gene  = TasicBenchmarkStringent$samples_used_20_rep_1_filterStringent$metaInfo)
+
+Tasic_stringent_20v20_2 <- sumstats(counts = TasicBenchmarkStringent$samples_used_20_rep_2_filterStringent$data, 
+                                  tx2gene  = TasicBenchmarkStringent$samples_used_20_rep_2_filterStringent$metaInfo)
+
+Tasic_stringent_20v20_3 <- sumstats(counts = TasicBenchmarkStringent$samples_used_20_rep_3_filterStringent$data, 
+                                  tx2gene  = TasicBenchmarkStringent$samples_used_20_rep_3_filterStringent$metaInfo)
+
+## Stringent DRIMSeq, 200v200
+Tasic_stringent_200v200_1 <- sumstats(counts = TasicBenchmarkStringent$samples_used_200_rep_1_filterStringent$data, 
+                                  tx2gene  = TasicBenchmarkStringent$samples_used_200_rep_1_filterStringent$metaInfo)
+Tasic_stringent_200v200_2 <- sumstats(counts = TasicBenchmarkStringent$samples_used_200_rep_2_filterStringent$data, 
+                                  tx2gene  = TasicBenchmarkStringent$samples_used_200_rep_2_filterStringent$metaInfo)
+Tasic_stringent_200v200_3 <- sumstats(counts = TasicBenchmarkStringent$samples_used_200_rep_3_filterStringent$data, 
+                                  tx2gene  = TasicBenchmarkStringent$samples_used_200_rep_3_filterStringent$metaInfo)
+```
+
+```{r}
+# Fill in sumstats
+Tasic_sumstats <- matrix(data = NA, nrow=4, ncol=5)
+colnames(Tasic_sumstats) <- c("Tasic_lenient_20v20", "Tasic_lenient_200v200",
+                              "Tasic_stringent_20v20", "Tasic_stringent_200v200",
+                              "Tasic_raw")
+rownames(Tasic_sumstats) <- c("n_transcripts", "overall_zero", "binary", "all_zero")
+
+## Lenient edgeR, 20v20
+Tasic_lenient_20v20 <- list(Tasic_lenient_20v20_1, Tasic_lenient_20v20_2, Tasic_lenient_20v20_3)
+Tasic_sumstats[,"Tasic_lenient_20v20"] <- c(round(mean(unlist(map(Tasic_lenient_20v20,1))), digits = 0),
+  round(mean(unlist(map(Tasic_lenient_20v20,2))) * 100, digits=2),
+  round(mean(unlist(map(Tasic_lenient_20v20,3))) * 100, digits=2),
+  round(mean(unlist(map(Tasic_lenient_20v20,4))) * 100, digits=2)
+)
+
+## Lenient edgeR, 200v200
+Tasic_lenient_200v200 <- list(Tasic_lenient_200v200_1, Tasic_lenient_200v200_2, Tasic_lenient_200v200_3)
+Tasic_sumstats[,"Tasic_lenient_200v200"] <- c(round(mean(unlist(map(Tasic_lenient_200v200,1))), digits = 0),
+  round(mean(unlist(map(Tasic_lenient_200v200,2))) * 100, digits=2),
+  round(mean(unlist(map(Tasic_lenient_200v200,3))) * 100, digits=2),
+  round(mean(unlist(map(Tasic_lenient_200v200,4))) * 100, digits=2)
+)
+
+## Stringent DRIMSeq, 20v20
+Tasic_stringent_20v20 <- list(Tasic_stringent_20v20_1, Tasic_stringent_20v20_2, Tasic_stringent_20v20_3)
+Tasic_sumstats[,"Tasic_stringent_20v20"] <- c(round(mean(unlist(map(Tasic_stringent_20v20,1))), digits = 0),
+  round(mean(unlist(map(Tasic_stringent_20v20,2))) * 100, digits=2),
+  round(mean(unlist(map(Tasic_stringent_20v20,3))) * 100, digits=2),
+  round(mean(unlist(map(Tasic_stringent_20v20,4))) * 100, digits=2)
+)
+
+## Stringent DRIMSeq, 200v200
+Tasic_stringent_200v200 <- list(Tasic_stringent_200v200_1, Tasic_stringent_200v200_2, Tasic_stringent_200v200_3)
+Tasic_sumstats[,"Tasic_stringent_200v200"] <- c(round(mean(unlist(map(Tasic_stringent_200v200,1))), digits = 0),
+  round(mean(unlist(map(Tasic_stringent_200v200,2))) * 100, digits=2),
+  round(mean(unlist(map(Tasic_stringent_200v200,3))) * 100, digits=2),
+  round(mean(unlist(map(Tasic_stringent_200v200,4))) * 100, digits=2)
+)
+```
+
+## Raw data
+
+Compute summary statistics for the Tasic dataset without any prior 
+transcript-levelfiltering (raw data).
+
+Get counts
+
+```{r}
+tasic_data <- readRDS("./Data/Tasic_counts.rds")
+```
+
+Get genome annotation
+
+```{r, message=FALSE}
+library(AnnotationHub)
+library(ensembldb)
+
+## Load the annotation resource.
+ah <- AnnotationHub()
+
+## Query for all available EnsDb databases
+all <- query(ah, "EnsDb")
+
+ahEdb <- all[["AH75036"]] #for Mus musculus
+
+txs <- transcripts(ahEdb)
+
+tx2gene <- as.data.frame(matrix(data = NA, nrow = length(txs), ncol = 2))
+colnames(tx2gene) <- c("TXNAME","GENEID")
+tx2gene$TXNAME <- txs$tx_id
+tx2gene$GENEID <- txs$gene_id
+
+### Extract gene info
+txInfo <- tx2gene
+colnames(txInfo) <- c('isoform_id','gene_id')
+rownames(txInfo) <- NULL
+
+txInfo <- txInfo[which(
+    ! grepl('^ERCC-', txInfo$isoform_id )
+),]
+
+colnames(txInfo) <- c("TXNAME", "GENEID")
+rownames(tasic_data) <- sub("\\..*", "", rownames(tasic_data))
+
+# Get only multi-isoform genes (after filtering)
+tmp <- table(txInfo$GENEID)
+tmp <- tmp[which( tmp >= 2)]
+
+txInfo <- txInfo[which(txInfo$GENEID %in% names(tmp)),]
+tasic_data <- tasic_data[which(rownames(tasic_data) %in% txInfo$TXNAME),]
+```
+
+```{r}
+tasic_raw <- sumstats(counts = tasic_data, 
+                      tx2gene = txInfo)
+
+Tasic_sumstats[,"Tasic_raw"] <- c(round(tasic_raw$n_transcripts, digits=0),
+                                  round(tasic_raw$overall_zero*100, digits=2),
+                                  round(tasic_raw$binary*100, digits=2),
+                                  round(tasic_raw$all_zero*100, digits=2))
+saveRDS(Tasic_sumstats, "./Data/sumstats/Tasic_sumstats.rds")
+rm(list = setdiff(ls(), "sumstats"))
+```
+
+# Chen dataset
+
+## Filtered data
+
+```{r}
+load("./Data/Chen_benchmark_datasets_count.Rdata")
+
+## Lenient edgeR filter, 20v20
+Chen_lenient_20v20_1 <- sumstats(counts = ChenBenchmarkLenient$samples_used_20_rep_1_filterLenient$data, 
+                                  tx2gene  = ChenBenchmarkLenient$samples_used_20_rep_1_filterLenient$metaInfo)
+
+Chen_lenient_20v20_2 <- sumstats(counts = ChenBenchmarkLenient$samples_used_20_rep_2_filterLenient$data, 
+                                  tx2gene  = ChenBenchmarkLenient$samples_used_20_rep_2_filterLenient$metaInfo)
+
+Chen_lenient_20v20_3 <- sumstats(counts = ChenBenchmarkLenient$samples_used_20_rep_3_filterLenient$data, 
+                                  tx2gene  = ChenBenchmarkLenient$samples_used_20_rep_3_filterLenient$metaInfo)
+
+## Lenient edgeR filter, 50v50
+Chen_lenient_50v50_1 <- sumstats(counts = ChenBenchmarkLenient$samples_used_50_rep_1_filterLenient$data, 
+                                  tx2gene  = ChenBenchmarkLenient$samples_used_50_rep_1_filterLenient$metaInfo)
+
+Chen_lenient_50v50_2 <- sumstats(counts = ChenBenchmarkLenient$samples_used_50_rep_2_filterLenient$data, 
+                                  tx2gene  = ChenBenchmarkLenient$samples_used_50_rep_2_filterLenient$metaInfo)
+
+Chen_lenient_50v50_3 <- sumstats(counts = ChenBenchmarkLenient$samples_used_50_rep_3_filterLenient$data, 
+                                  tx2gene  = ChenBenchmarkLenient$samples_used_50_rep_3_filterLenient$metaInfo)
+
+## Stringent DRIMSeq filter, 20v20
+Chen_stringent_20v20_1 <- sumstats(counts = ChenBenchmarkStringent$samples_used_20_rep_1_filterStringent$data, 
+                                  tx2gene  = ChenBenchmarkStringent$samples_used_20_rep_1_filterStringent$metaInfo)
+
+Chen_stringent_20v20_2 <- sumstats(counts = ChenBenchmarkStringent$samples_used_20_rep_2_filterStringent$data, 
+                                  tx2gene  = ChenBenchmarkStringent$samples_used_20_rep_2_filterStringent$metaInfo)
+
+Chen_stringent_20v20_3 <- sumstats(counts = ChenBenchmarkStringent$samples_used_20_rep_3_filterStringent$data, 
+                                  tx2gene  = ChenBenchmarkStringent$samples_used_20_rep_3_filterStringent$metaInfo)
+
+## Stringent DRIMSeq filter, 50v50
+Chen_stringent_50v50_1 <- sumstats(counts = ChenBenchmarkStringent$samples_used_50_rep_1_filterStringent$data, 
+                                  tx2gene  = ChenBenchmarkStringent$samples_used_50_rep_1_filterStringent$metaInfo)
+
+Chen_stringent_50v50_2 <- sumstats(counts = ChenBenchmarkStringent$samples_used_50_rep_2_filterStringent$data, 
+                                  tx2gene  = ChenBenchmarkStringent$samples_used_50_rep_2_filterStringent$metaInfo)
+
+Chen_stringent_50v50_3 <- sumstats(counts = ChenBenchmarkStringent$samples_used_50_rep_3_filterStringent$data, 
+                                  tx2gene  = ChenBenchmarkStringent$samples_used_50_rep_3_filterStringent$metaInfo)
+```
+
+```{r}
+# Fill in sumstats
+Chen_sumstats <- matrix(data = NA, nrow=4, ncol=5)
+colnames(Chen_sumstats) <- c("Chen_lenient_20v20", "Chen_lenient_50v50", 
+                             "Chen_stringent_20v20", "Chen_stringent_50v50",
+                              "Chen_raw")
+rownames(Chen_sumstats) <- c("n_transcripts", "overall_zero", "binary", "all_zero")
+```
+
+```{r}
+## Lenient edgeR, 20v20
+Chen_lenient_20v20 <- list(Chen_lenient_20v20_1, Chen_lenient_20v20_2, Chen_lenient_20v20_3)
+Chen_sumstats[,"Chen_lenient_20v20"] <- c(round(mean(unlist(map(Chen_lenient_20v20,1))), digits = 0),
+  round(mean(unlist(map(Chen_lenient_20v20,2))) * 100, digits=2),
+  round(mean(unlist(map(Chen_lenient_20v20,3))) * 100, digits=2),
+  round(mean(unlist(map(Chen_lenient_20v20,4))) * 100, digits=2)
+)
+
+## Lenient edgeR, 50v50
+Chen_lenient_50v50 <- list(Chen_lenient_50v50_1, Chen_lenient_50v50_2, Chen_lenient_50v50_3)
+Chen_sumstats[,"Chen_lenient_50v50"] <- c(round(mean(unlist(map(Chen_lenient_50v50,1))), digits = 0),
+  round(mean(unlist(map(Chen_lenient_50v50,2))) * 100, digits=2),
+  round(mean(unlist(map(Chen_lenient_50v50,3))) * 100, digits=2),
+  round(mean(unlist(map(Chen_lenient_50v50,4))) * 100, digits=2)
+)
+
+## Stringent DRIMSeq, 20v20
+Chen_stringent_20v20 <- list(Chen_stringent_20v20_1, Chen_stringent_20v20_2, Chen_stringent_20v20_3)
+Chen_sumstats[,"Chen_stringent_20v20"] <- c(round(mean(unlist(map(Chen_stringent_20v20,1))), digits = 0),
+  round(mean(unlist(map(Chen_stringent_20v20,2))) * 100, digits=2),
+  round(mean(unlist(map(Chen_stringent_20v20,3))) * 100, digits=2),
+  round(mean(unlist(map(Chen_stringent_20v20,4))) * 100, digits=2)
+)
+
+## Stringent DRIMSeq, 50v50
+Chen_stringent_50v50 <- list(Chen_stringent_50v50_1, Chen_stringent_50v50_2, Chen_stringent_50v50_3)
+Chen_sumstats[,"Chen_stringent_50v50"] <- c(round(mean(unlist(map(Chen_stringent_50v50,1))), digits = 0),
+  round(mean(unlist(map(Chen_stringent_50v50,2))) * 100, digits=2),
+  round(mean(unlist(map(Chen_stringent_50v50,3))) * 100, digits=2),
+  round(mean(unlist(map(Chen_stringent_50v50,4))) * 100, digits=2)
+)
+```
+
+## Raw data
+
+Get counts
+
+```{r}
+Chen_counts <- readRDS("./Data/Chen_counts.rds")
+```
+
+```{r}
+metaData <- read.csv("./Data/Chen_metadata.csv")
+rownames(metaData) <- metaData$Run
+metaData <- metaData[colnames(Chen_counts),]
+```
+
+```{r, message=FALSE}
+## Load the annotation resource.
+ah <- AnnotationHub()
+
+## Query for all available EnsDb databases
+all <- query(ah, "EnsDb")
+ahEdb <- all[["AH75036"]] #for Mus musculus
+
+txs <- transcripts(ahEdb)
+
+### Extract gene info
+tx2gene <- as.data.frame(matrix(data = NA, nrow = length(txs), ncol = 2))
+colnames(tx2gene) <- c("TXNAME","GENEID")
+tx2gene$TXNAME <- txs$tx_id
+tx2gene$GENEID <- txs$gene_id
+
+txInfo <- tx2gene
+colnames(txInfo) <- c('isoform_id','gene_id')
+rownames(txInfo) <- NULL
+
+txInfo <- txInfo[which(
+    ! grepl('^ERCC-', txInfo$isoform_id )
+),]
+
+txInfo <- txInfo[which(txInfo$isoform_id %in% sub("\\..*", "", rownames(Chen_counts))),]
+
+txInfo$isoform_id <- rownames(Chen_counts)[match(txInfo$isoform_id,sub("\\..*", "", rownames(Chen_counts)))]
+```
+
+```{r}
+## Select a homogeneous set of cells
+metaData <- metaData[which(metaData$Cell_type == "Epi" & metaData$sex == "female"),]
+Chen_counts <- Chen_counts[,as.character(metaData$Run)]
+```
+
+```{r}
+colnames(txInfo) <- c("TXNAME", "GENEID")
+
+# Get only multi-isoform genes (after filtering)
+tmp <- table(txInfo$GENEID)
+tmp <- tmp[which( tmp >= 2)]
+
+txInfo <- txInfo[which(txInfo$GENEID %in% names(tmp)),]
+Chen_counts <- Chen_counts[which(rownames(Chen_counts) %in% txInfo$TXNAME),]
+```
+
+```{r}
+Chen_raw <- sumstats(counts = Chen_counts, 
+                      tx2gene = txInfo)
+
+Chen_sumstats[,"Chen_raw"] <- c(round(Chen_raw$n_transcripts, digits=0),
+                                  round(Chen_raw$overall_zero*100, digits=2),
+                                  round(Chen_raw$binary*100, digits=2),
+                                  round(Chen_raw$all_zero*100, digits=2))
+saveRDS(Chen_sumstats, "./Data/sumstats/Chen_sumstats.rds")
+rm(list = setdiff(ls(), "sumstats"))
+```
+
+# Darmanis dataset
+
+## Filtered data
+
+```{r}
+load("./Data/Darmanis_benchmark_datasets_count.Rdata")
+
+## Lenient edgeR filter, 20v20
+Darmanis_lenient_20v20_1 <- sumstats(counts = DarmanisBenchmarkLenient$samples_used_20_rep_1_filterLenient$data, 
+                                  tx2gene  = DarmanisBenchmarkLenient$samples_used_20_rep_1_filterLenient$metaInfo)
+
+Darmanis_lenient_20v20_2 <- sumstats(counts = DarmanisBenchmarkLenient$samples_used_20_rep_2_filterLenient$data, 
+                                  tx2gene  = DarmanisBenchmarkLenient$samples_used_20_rep_2_filterLenient$metaInfo)
+
+Darmanis_lenient_20v20_3 <- sumstats(counts = DarmanisBenchmarkLenient$samples_used_20_rep_3_filterLenient$data, 
+                                  tx2gene  = DarmanisBenchmarkLenient$samples_used_20_rep_3_filterLenient$metaInfo)
+
+## Lenient edgeR filter, 100v100
+Darmanis_lenient_100v100_1 <- sumstats(counts = DarmanisBenchmarkLenient$samples_used_100_rep_1_filterLenient$data, 
+                                  tx2gene  = DarmanisBenchmarkLenient$samples_used_100_rep_1_filterLenient$metaInfo)
+
+Darmanis_lenient_100v100_2 <- sumstats(counts = DarmanisBenchmarkLenient$samples_used_100_rep_2_filterLenient$data, 
+                                  tx2gene  = DarmanisBenchmarkLenient$samples_used_100_rep_2_filterLenient$metaInfo)
+
+Darmanis_lenient_100v100_3 <- sumstats(counts = DarmanisBenchmarkLenient$samples_used_100_rep_3_filterLenient$data, 
+                                  tx2gene  = DarmanisBenchmarkLenient$samples_used_100_rep_3_filterLenient$metaInfo)
+
+## Stringent DRIMSeq filter, 20v20
+Darmanis_stringent_20v20_1 <- sumstats(counts = DarmanisBenchmarkStringent$samples_used_20_rep_1_filterStringent$data, 
+                                  tx2gene  = DarmanisBenchmarkStringent$samples_used_20_rep_1_filterStringent$metaInfo)
+
+Darmanis_stringent_20v20_2 <- sumstats(counts = DarmanisBenchmarkStringent$samples_used_20_rep_2_filterStringent$data, 
+                                  tx2gene  = DarmanisBenchmarkStringent$samples_used_20_rep_2_filterStringent$metaInfo)
+
+Darmanis_stringent_20v20_3 <- sumstats(counts = DarmanisBenchmarkStringent$samples_used_20_rep_3_filterStringent$data, 
+                                  tx2gene  = DarmanisBenchmarkStringent$samples_used_20_rep_3_filterStringent$metaInfo)
+
+## Stringent DRIMSeq filter, 50v50
+Darmanis_stringent_100v100_1 <- sumstats(counts = DarmanisBenchmarkStringent$samples_used_100_rep_1_filterStringent$data, 
+                                  tx2gene  = DarmanisBenchmarkStringent$samples_used_100_rep_1_filterStringent$metaInfo)
+
+Darmanis_stringent_100v100_2 <- sumstats(counts = DarmanisBenchmarkStringent$samples_used_100_rep_2_filterStringent$data, 
+                                  tx2gene  = DarmanisBenchmarkStringent$samples_used_100_rep_2_filterStringent$metaInfo)
+
+Darmanis_stringent_100v100_3 <- sumstats(counts = DarmanisBenchmarkStringent$samples_used_100_rep_3_filterStringent$data, 
+                                  tx2gene  = DarmanisBenchmarkStringent$samples_used_100_rep_3_filterStringent$metaInfo)
+```
+
+```{r}
+# Fill in sumstats
+Darmanis_sumstats <- matrix(data = NA, nrow=4, ncol=5)
+colnames(Darmanis_sumstats) <- c("Darmanis_lenient_20v20", "Darmanis_lenient_100v100", 
+                                 "Darmanis_stringent_20v20", "Darmanis_stringent_100v100",
+                                 "Darmanis_raw")
+rownames(Darmanis_sumstats) <- c("n_transcripts", "overall_zero", "binary", "all_zero")
+```
+
+```{r}
+## Lenient edgeR, 20v20
+Darmanis_lenient_20v20 <- list(Darmanis_lenient_20v20_1, Darmanis_lenient_20v20_2, Darmanis_lenient_20v20_3)
+Darmanis_sumstats[,"Darmanis_lenient_20v20"] <- c(round(mean(unlist(map(Darmanis_lenient_20v20,1))), digits = 0),
+  round(mean(unlist(map(Darmanis_lenient_20v20,2))) * 100, digits=2),
+  round(mean(unlist(map(Darmanis_lenient_20v20,3))) * 100, digits=2),
+  round(mean(unlist(map(Darmanis_lenient_20v20,4))) * 100, digits=2)
+)
+
+## Lenient edgeR, 100v100
+Darmanis_lenient_100v100 <- list(Darmanis_lenient_100v100_1, Darmanis_lenient_100v100_2, Darmanis_lenient_100v100_3)
+Darmanis_sumstats[,"Darmanis_lenient_100v100"] <- c(round(mean(unlist(map(Darmanis_lenient_100v100,1))), digits = 0),
+  round(mean(unlist(map(Darmanis_lenient_100v100,2))) * 100, digits=2),
+  round(mean(unlist(map(Darmanis_lenient_100v100,3))) * 100, digits=2),
+  round(mean(unlist(map(Darmanis_lenient_100v100,4))) * 100, digits=2)
+)
+
+## Stringent DRIMSeq, 20v20
+Darmanis_stringent_20v20 <- list(Darmanis_stringent_20v20_1, Darmanis_stringent_20v20_2, Darmanis_stringent_20v20_3)
+Darmanis_sumstats[,"Darmanis_stringent_20v20"] <- c(round(mean(unlist(map(Darmanis_stringent_20v20,1))), digits = 0),
+  round(mean(unlist(map(Darmanis_stringent_20v20,2))) * 100, digits=2),
+  round(mean(unlist(map(Darmanis_stringent_20v20,3))) * 100, digits=2),
+  round(mean(unlist(map(Darmanis_stringent_20v20,4))) * 100, digits=2)
+)
+
+## Stringent DRIMSeq, 100v100
+Darmanis_stringent_100v100 <- list(Darmanis_stringent_100v100_1, Darmanis_stringent_100v100_2, Darmanis_stringent_100v100_3)
+Darmanis_sumstats[,"Darmanis_stringent_100v100"] <- c(round(mean(unlist(map(Darmanis_stringent_100v100,1))), digits = 0),
+  round(mean(unlist(map(Darmanis_stringent_100v100,2))) * 100, digits=2),
+  round(mean(unlist(map(Darmanis_stringent_100v100,3))) * 100, digits=2),
+  round(mean(unlist(map(Darmanis_stringent_100v100,4))) * 100, digits=2)
+)
+```
+
+## Raw data
+
+```{r}
+Darmanis_counts <- readRDS("./Data/Darmanis_counts.rds")
+```
+
+```{r}
+### Extract gene info
+txInfo <- Darmanis_counts@ExperimentList$tx@rowRanges
+txInfo <- as.data.frame(mcols(txInfo[,c('transcript','gene')]))
+colnames(txInfo) <- c("TXNAME", "GENEID")
+rownames(txInfo) <- NULL
+txInfo$TXNAME <- as.character(txInfo$TXNAME)
+txInfo$GENEID <- as.character(txInfo$GENEID)
+```
+
+```{r}
+load(file = "./Data/Darmanis_metadata.Rdata")
+### Subset expression matrix
+Darmanis_counts <- Darmanis_counts@ExperimentList$tx@assays$data$count[,cellsOfInterest] # count input
+```
+
+```{r}
+# Get only multi-isoform genes (after filtering)
+tmp <- table(txInfo$GENEID)
+tmp <- tmp[which( tmp >= 2)]
+
+txInfo <- txInfo[which(txInfo$GENEID %in% names(tmp)),]
+Darmanis_counts <- Darmanis_counts[which(rownames(Darmanis_counts) %in% txInfo$TXNAME),]
+```
+
+```{r}
+Darmanis_raw <- sumstats(counts = Darmanis_counts, 
+                      tx2gene = txInfo)
+
+Darmanis_sumstats[,"Darmanis_raw"] <- c(round(Darmanis_raw$n_transcripts, digits=0),
+                                  round(Darmanis_raw$overall_zero*100, digits=2),
+                                  round(Darmanis_raw$binary*100, digits=2),
+                                  round(Darmanis_raw$all_zero*100, digits=2))
+saveRDS(Darmanis_sumstats, "./Data/sumstats/Darmanis_sumstats.rds")
+rm(list = setdiff(ls(), "sumstats"))
+```
+
+# Gtex dataset
+
+## Filtered data
+
+```{r}
+load("./Data/GTEx_benchmark_datasets_count.Rdata")
+
+## Lenient edgeR filter, 5v5
+gtex_lenient_5v5_1 <- sumstats(counts = gtexBenchmarkDataLenient$samples_used_5_rep_1_filterLenient$data, 
+                                  tx2gene  = gtexBenchmarkDataLenient$samples_used_5_rep_1_filterLenient$metaInfo)
+
+gtex_lenient_5v5_2 <- sumstats(counts = gtexBenchmarkDataLenient$samples_used_5_rep_2_filterLenient$data, 
+                                  tx2gene  = gtexBenchmarkDataLenient$samples_used_5_rep_2_filterLenient$metaInfo)
+
+gtex_lenient_5v5_3 <- sumstats(counts = gtexBenchmarkDataLenient$samples_used_5_rep_3_filterLenient$data, 
+                                  tx2gene  = gtexBenchmarkDataLenient$samples_used_5_rep_3_filterLenient$metaInfo)
+
+## Lenient edgeR filter, 50v50
+gtex_lenient_50v50_1 <- sumstats(counts = gtexBenchmarkDataLenient$samples_used_50_rep_1_filterLenient$data, 
+                                  tx2gene  = gtexBenchmarkDataLenient$samples_used_50_rep_1_filterLenient$metaInfo)
+
+gtex_lenient_50v50_2 <- sumstats(counts = gtexBenchmarkDataLenient$samples_used_50_rep_2_filterLenient$data, 
+                                  tx2gene  = gtexBenchmarkDataLenient$samples_used_50_rep_2_filterLenient$metaInfo)
+
+gtex_lenient_50v50_3 <- sumstats(counts = gtexBenchmarkDataLenient$samples_used_50_rep_3_filterLenient$data, 
+                                  tx2gene  = gtexBenchmarkDataLenient$samples_used_50_rep_3_filterLenient$metaInfo)
+
+## Stringent DRIMSeq filter, 5v5
+gtex_stringent_5v5_1 <- sumstats(counts = gtexBenchmarkDataStringent$samples_used_5_rep_1_filterStringent$data, 
+                                  tx2gene  = gtexBenchmarkDataStringent$samples_used_5_rep_1_filterStringent$metaInfo)
+
+gtex_stringent_5v5_2 <- sumstats(counts = gtexBenchmarkDataStringent$samples_used_5_rep_2_filterStringent$data, 
+                                  tx2gene  = gtexBenchmarkDataStringent$samples_used_5_rep_2_filterStringent$metaInfo)
+
+gtex_stringent_5v5_3 <- sumstats(counts = gtexBenchmarkDataStringent$samples_used_5_rep_3_filterStringent$data, 
+                                  tx2gene  = gtexBenchmarkDataStringent$samples_used_5_rep_3_filterStringent$metaInfo)
+
+## Stringent DRIMSeq filter, 50v50
+gtex_stringent_50v50_1 <- sumstats(counts = gtexBenchmarkDataStringent$samples_used_50_rep_1_filterStringent$data, 
+                                  tx2gene  = gtexBenchmarkDataStringent$samples_used_50_rep_1_filterStringent$metaInfo)
+
+gtex_stringent_50v50_2 <- sumstats(counts = gtexBenchmarkDataStringent$samples_used_50_rep_2_filterStringent$data, 
+                                  tx2gene  = gtexBenchmarkDataStringent$samples_used_50_rep_2_filterStringent$metaInfo)
+
+gtex_stringent_50v50_3 <- sumstats(counts = gtexBenchmarkDataStringent$samples_used_50_rep_3_filterStringent$data, 
+                                  tx2gene  = gtexBenchmarkDataStringent$samples_used_50_rep_3_filterStringent$metaInfo)
+```
+
+```{r}
+# Fill in sumstats
+gtex_sumstats <- matrix(data = NA, nrow=4, ncol=5)
+colnames(gtex_sumstats) <- c("gtex_lenient_5v5", "gtex_lenient_50v50", 
+                                 "gtex_stringent_5v5", "gtex_stringent_50v50",
+                                 "gtex_raw")
+rownames(gtex_sumstats) <- c("n_transcripts", "overall_zero", "binary", "all_zero")
+```
+
+```{r}
+## Lenient edgeR, 5v5
+gtex_lenient_5v5 <- list(gtex_lenient_5v5_1, gtex_lenient_5v5_2, gtex_lenient_5v5_3)
+gtex_sumstats[,"gtex_lenient_5v5"] <- c(round(mean(unlist(map(gtex_lenient_5v5,1))), digits = 0),
+  round(mean(unlist(map(gtex_lenient_5v5,2))) * 100, digits=2),
+  round(mean(unlist(map(gtex_lenient_5v5,3))) * 100, digits=2),
+  round(mean(unlist(map(gtex_lenient_5v5,4))) * 100, digits=2)
+)
+
+## Lenient edgeR, 50v50
+gtex_lenient_50v50 <- list(gtex_lenient_50v50_1, gtex_lenient_50v50_2, gtex_lenient_50v50_3)
+gtex_sumstats[,"gtex_lenient_50v50"] <- c(round(mean(unlist(map(gtex_lenient_50v50,1))), digits = 0),
+  round(mean(unlist(map(gtex_lenient_50v50,2))) * 100, digits=2),
+  round(mean(unlist(map(gtex_lenient_50v50,3))) * 100, digits=2),
+  round(mean(unlist(map(gtex_lenient_50v50,4))) * 100, digits=2)
+)
+
+## Stringent DRIMSeq, 5v5
+gtex_stringent_5v5 <- list(gtex_stringent_5v5_1, gtex_stringent_5v5_2, gtex_stringent_5v5_3)
+gtex_sumstats[,"gtex_stringent_5v5"] <- c(round(mean(unlist(map(gtex_stringent_5v5,1))), digits = 0),
+  round(mean(unlist(map(gtex_stringent_5v5,2))) * 100, digits=2),
+  round(mean(unlist(map(gtex_stringent_5v5,3))) * 100, digits=2),
+  round(mean(unlist(map(gtex_stringent_5v5,4))) * 100, digits=2)
+)
+
+## Stringent DRIMSeq, 50v50
+gtex_stringent_50v50 <- list(gtex_stringent_50v50_1, gtex_stringent_50v50_2, gtex_stringent_50v50_3)
+gtex_sumstats[,"gtex_stringent_50v50"] <- c(round(mean(unlist(map(gtex_stringent_50v50,1))), digits = 0),
+  round(mean(unlist(map(gtex_stringent_50v50,2))) * 100, digits=2),
+  round(mean(unlist(map(gtex_stringent_50v50,3))) * 100, digits=2),
+  round(mean(unlist(map(gtex_stringent_50v50,4))) * 100, digits=2)
+)
+```
+
+## Raw data
+
+```{r,"load data"}
+gtexCm <- fread("./Data/GTEx_counts.gz", data.table = FALSE)
+gtexSample <- fread("./Data/GTEx_metadata.txt", data.table = FALSE)
+```
+
+```{r}
+# Extract gene info
+txInfo <- gtexCm[,c('transcript_id','gene_id')]
+colnames(txInfo)  <- c("TXNAME", "GENEID")
+rownames(gtexCm) <- txInfo$TXNAME
+
+# Extract samples
+gtexSample <- gtexSample[
+    which(gtexSample$SMTSD == 'Adrenal Gland'),
+]
+
+# Specifically filter on extraction kit
+gtexSample <- gtexSample[
+    which(gtexSample$SMNABTCHT == 'RNA Extraction from Paxgene-derived Lysate Plate Based'),
+]
+
+# Specifically filter on SMAFRZE
+gtexSample <- gtexSample[
+    which(gtexSample$SMAFRZE == 'RNASEQ'),
+]
+
+# Specifically filter on center
+gtexSample <- gtexSample[
+    which(gtexSample$SMCENTER == 'B1'),
+]
+
+gtexCm <- gtexCm[,which(
+    colnames(gtexCm) %in% gtexSample$SAMPID
+)]
+```
+
+```{r}
+# Get only multi-isoform genes (after filtering)
+tmp <- table(txInfo$GENEID)
+tmp <- tmp[which( tmp >= 2)]
+
+txInfo <- txInfo[which(txInfo$GENEID %in% names(tmp)),]
+gtexCm <- gtexCm[which(rownames(gtexCm) %in% txInfo$TXNAME),]
+```
+
+```{r}
+gtex_raw <- sumstats(counts = gtexCm, 
+                      tx2gene = txInfo)
+
+gtex_sumstats[,"gtex_raw"] <- c(round(gtex_raw$n_transcripts, digits=0),
+                                  round(gtex_raw$overall_zero*100, digits=2),
+                                  round(gtex_raw$binary*100, digits=2),
+                                  round(gtex_raw$all_zero*100, digits=2))
+saveRDS(gtex_sumstats, "./Data/sumstats/gtex_sumstats.rds")
+rm(list= ls())
+gc()
+```
+
+# Table S1
+
+Read in the summary statistics that were computed;
+
+```{r}
+Tasic_sumstats <- readRDS("./Data/sumstats/Tasic_sumstats.rds")
+Chen_sumstats <- readRDS("./Data/sumstats/Chen_sumstats.rds")
+Darmanis_sumstats <- readRDS("./Data/sumstats/Darmanis_sumstats.rds")
+gtex_sumstats <- readRDS("./Data/sumstats/gtex_sumstats.rds")
+
+sumstats <- as.data.frame(cbind(Tasic_sumstats, Chen_sumstats, Darmanis_sumstats, gtex_sumstats))
+```
+
+Write out the the summary statistics as an .xlsx file. These data were used to
+construct table S1 from the `satuRn` manuscript.
+
+```{r}
+openxlsx::write.xlsx(sumstats, "./Results/Sumstats/sumstats.xlsx", 
+                     overwrite = FALSE,
+                     rowNames = TRUE)
+```
+
+```{r}
+sessionInfo()
+```
+
+

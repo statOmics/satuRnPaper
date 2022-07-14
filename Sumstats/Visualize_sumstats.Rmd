@@ -1,0 +1,344 @@
+---
+title: "Visualize summary statistics for the different datasets"
+author: "Jeroen Gilis"
+date: "09/07/2022"
+output:
+  html_document:
+    code_download: yes
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+    highlight: tango
+    number_sections: yes
+  pdf_document:
+    toc: yes
+---
+
+In this script, we **Visualize** several summary statistics and characteristics 
+of the four real RNA-seq datasets that were used in this manuscript; the GTEx 
+bulk dataset and the scRNA-seq datasets from Tasic et al., Chen et al. and 
+Darmanis et al. The data generated in this script were used to generate Extended
+data Figure S32 from the manuscript.
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+```{r}
+load("./Data/Tasic_benchmark_datasets_count.Rdata")
+load("./Data/Chen_benchmark_datasets_count.Rdata")
+load("./Data/Darmanis_benchmark_datasets_count.Rdata")
+load("./Data/GTEx_benchmark_datasets_count.Rdata")
+```
+
+# Figure S32 panel A
+
+Density plot of the library sizes. The densities are obtained as the total sum 
+of the counts per cell in each dataset. Library sizes are smallest for the 
+Darmanis dataset. The mode of the densities for the Tasic dataset and the Chen 
+dataset are similar, however, the spread is considerably larger for the Chen 
+dataset.
+
+The GTEx dataset was omitted from this panel, as the library sizes were an order
+of magnitude higher for that dataset than for the single-cell datasets, hence
+obscuring differences between the latter.
+
+```{r}
+Tasic1 <- colSums(TasicBenchmarkLenient$samples_used_200_rep_1_filterLenient$data)
+Tasic2 <- colSums(TasicBenchmarkStringent$samples_used_200_rep_1_filterStringent$data)
+
+Chen1 <- colSums(ChenBenchmarkLenient$samples_used_50_rep_1_filterLenient$data)
+Chen2 <- colSums(ChenBenchmarkStringent$samples_used_50_rep_1_filterStringent$data)
+
+Darmanis1 <- colSums(DarmanisBenchmarkLenient$samples_used_100_rep_1_filterLenient$data)
+Darmanis2 <- colSums(DarmanisBenchmarkStringent$samples_used_100_rep_1_filterStringent$data)
+
+png("./Results/Sumstats/libsize_sc.png",
+  width     = 3.5,
+  height    = 3,
+  units     = "in",
+  res       = 200,
+  pointsize = 6) # start export
+
+# Plot the density without histogram
+plot(density(Tasic1), 
+     lwd = 2, 
+     col = "darkblue", 
+     main = "", 
+     xlim = c(0,8e6), 
+     ylim = c(0,max(density(Tasic2)$y)),
+     xlab = "Library size (counts)")
+
+# Add density
+lines(density(Tasic2), lwd = 2, col = "cyan")
+lines(density(Chen1), lwd = 2, col = "red")
+lines(density(Chen2), lwd = 2, col = "orange")
+lines(density(Darmanis1), lwd = 2, col = "darkgreen")
+lines(density(Darmanis2), lwd = 2, col = "green2")
+
+# Add a legend
+legend("topright", 
+  legend = c("Tasic lenient", "Tasic stringent",
+             "Chen lenient", "Chen stringent",
+             "Darmanis lenient", "Darmanis stringent"), 
+  col = c("darkblue","cyan","red","orange","darkgreen","green2"), 
+  pch = 20, 
+  bty = "n", 
+  pt.cex = 3, 
+  cex = 1.2, 
+  text.col = "black", 
+  horiz = F)
+
+dev.off()
+```
+
+# GTEx library sizes
+
+The GTEx dataset was omitted from figure S24 panel A, as the library sizes were 
+an order of magnitude higher for that dataset than for the single-cell datasets, 
+hence obscuring differences between the latter. For the sake of completeness,
+we here display the library sizes for the GTEx dataset.
+
+```{r}
+png("./Results/Sumstats/libsize_bulk.png",
+  width     = 3.5,
+  height    = 3,
+  units     = "in",
+  res       = 200,
+  pointsize = 6) # start export
+
+gtex1 <- colSums(gtexBenchmarkDataLenient$samples_used_50_rep_1_filterLenient$data)
+gtex2 <- colSums(gtexBenchmarkDataStringent$samples_used_50_rep_1_filterStringent$data)
+
+axisrange <- c(min(range(c(gtex1,gtex2))), 
+               max(range(c(gtex1,gtex2))))
+
+# Plot the density without histogram
+plot(density(gtex1), lwd = 2, col = "black", main = "",
+     xlim=axisrange, ylim=c(0,max(density(gtex2)$y)),
+     xlab = "Library size (counts)")
+
+# Add density
+lines(density(gtex2), lwd = 2, col = "grey72")
+
+# Add a legend
+legend("topright", 
+  legend = c("gtex lenient", "gtex stringent"), 
+  col = c("black","grey72"), 
+  pch = 20, 
+  bty = "n", 
+  pt.cex = 3, 
+  cex = 1.2, 
+  text.col = "black", 
+  horiz = F)
+
+dev.off()
+```
+
+# Figure S32 panel B
+
+Density plot of the fraction of zero counts per cell. The fraction of zero 
+counts per cell is largest for the Darmanis dataset (modes of around 55% and 
+35%), followed by the Tasic dataset (modes of around 40% and 30%) and the Chen 
+dataset (modes of around 35% and 25%). Adopting the more stringent transcript-
+level filtering criterium of DRIMSeq naturally reduces the percentage of zero 
+counts. As a comparison, the fraction of zero counts on the bulk RNA-seq GTEx 
+dataset (100 samples) was included as a reference (modes of around 5%). 
+
+```{r}
+Tasic_lenient_frac0_ps <- colSums(TasicBenchmarkLenient$samples_used_200_rep_1_filterLenient$data == 0)/nrow(TasicBenchmarkLenient$samples_used_200_rep_1_filterLenient$data)
+Tasic_stringent_frac0_ps <- colSums(TasicBenchmarkStringent$samples_used_200_rep_1_filterStringent$data == 0)/nrow(TasicBenchmarkStringent$samples_used_200_rep_1_filterStringent$data)
+
+Chen_lenient_frac0_ps <- colSums(ChenBenchmarkLenient$samples_used_50_rep_1_filterLenient$data == 0)/nrow(ChenBenchmarkLenient$samples_used_50_rep_1_filterLenient$data)
+Chen_stringent_frac0_ps <- colSums(ChenBenchmarkStringent$samples_used_50_rep_1_filterStringent$data == 0)/nrow(ChenBenchmarkStringent$samples_used_50_rep_1_filterStringent$data)
+
+Darmanis_lenient_frac0_ps <- colSums(DarmanisBenchmarkLenient$samples_used_100_rep_1_filterLenient$data == 0)/nrow(DarmanisBenchmarkLenient$samples_used_100_rep_1_filterLenient$data)
+Darmanis_stringent_frac0_ps <- colSums(DarmanisBenchmarkStringent$samples_used_100_rep_1_filterStringent$data == 0)/nrow(DarmanisBenchmarkStringent$samples_used_100_rep_1_filterStringent$data)
+
+gtex_lenient_frac0_ps <- colSums(gtexBenchmarkDataLenient$samples_used_50_rep_1_filterLenient$data == 0)/nrow(gtexBenchmarkDataLenient$samples_used_50_rep_1_filterLenient$data)
+gtex_stringent_frac0_ps <- colSums(gtexBenchmarkDataStringent$samples_used_50_rep_1_filterStringent$data == 0)/nrow(gtexBenchmarkDataStringent$samples_used_50_rep_1_filterStringent$data)
+
+png("./Results/Sumstats/frac0_percell.png",
+  width     = 3.5,
+  height    = 3,
+  units     = "in",
+  res       = 200,
+  pointsize = 6) # start export
+
+# Plot the density without histogram
+plot(density(Tasic_lenient_frac0_ps), lwd = 2, col = "darkblue", 
+     main = "", 
+     xlim=c(0,1), 
+     ylim=c(0,max(density(gtex_lenient_frac0_ps)$y)),
+     xlab = "Fraction zeros per cell")
+
+# Add density
+lines(density(Tasic_stringent_frac0_ps), lwd = 2, col = "cyan")
+lines(density(Chen_lenient_frac0_ps), lwd = 2, col = "red")
+lines(density(Chen_stringent_frac0_ps), lwd = 2, col = "orange")
+lines(density(Darmanis_lenient_frac0_ps), lwd = 2, col = "darkgreen")
+lines(density(Darmanis_stringent_frac0_ps), lwd = 2, col = "green2")
+lines(density(gtex_lenient_frac0_ps), lwd = 2, col = "black")
+lines(density(gtex_stringent_frac0_ps), lwd = 2, col = "grey72")
+
+# Add a legend
+legend("topright", 
+  legend = c("Tasic lenient", "Tasic stringent",
+             "Chen lenient", "Chen stringent",
+             "Darmanis lenient", "Darmanis stringent",
+             "gtex lenient", "gtex stringent"), 
+  col = c("darkblue","cyan","red","orange","darkgreen","green2", "black", "grey72"), 
+  pch = 20, 
+  bty = "n", 
+  pt.cex = 3, 
+  cex = 1.2, 
+  text.col = "black", 
+  horiz = F)
+
+dev.off()
+```
+
+# Figure S32 panel C
+
+Density plot of the fraction of zero counts per transcript. Similar to panel B, 
+the percentage zero counts per transcript is highest for the Darmanis dataset, 
+followed by the Tasic dataset, the Chen dataset and the GTEx dataset. 
+
+```{r}
+Tasic_lenient_frac0_pt <- rowSums(TasicBenchmarkLenient$samples_used_200_rep_1_filterLenient$data == 0)/ncol(TasicBenchmarkLenient$samples_used_200_rep_1_filterLenient$data)
+Tasic_stringent_frac0_pt <- rowSums(TasicBenchmarkStringent$samples_used_200_rep_1_filterStringent$data == 0)/ncol(TasicBenchmarkStringent$samples_used_200_rep_1_filterStringent$data)
+
+Chen_lenient_frac0_pt <- rowSums(ChenBenchmarkLenient$samples_used_50_rep_1_filterLenient$data == 0)/ncol(ChenBenchmarkLenient$samples_used_50_rep_1_filterLenient$data)
+Chen_stringent_frac0_pt <- rowSums(ChenBenchmarkStringent$samples_used_50_rep_1_filterStringent$data == 0)/ncol(ChenBenchmarkStringent$samples_used_50_rep_1_filterStringent$data)
+
+Darmanis_lenient_frac0_pt <- rowSums(DarmanisBenchmarkLenient$samples_used_100_rep_1_filterLenient$data == 0)/ncol(DarmanisBenchmarkLenient$samples_used_100_rep_1_filterLenient$data)
+Darmanis_stringent_frac0_pt <- rowSums(DarmanisBenchmarkStringent$samples_used_100_rep_1_filterStringent$data == 0)/ncol(DarmanisBenchmarkStringent$samples_used_100_rep_1_filterStringent$data)
+
+gtex_lenient_frac0_pt <- rowSums(gtexBenchmarkDataLenient$samples_used_50_rep_1_filterLenient$data == 0)/ncol(gtexBenchmarkDataLenient$samples_used_50_rep_1_filterLenient$data)
+gtex_stringent_frac0_pt <- rowSums(gtexBenchmarkDataStringent$samples_used_50_rep_1_filterStringent$data == 0)/ncol(gtexBenchmarkDataStringent$samples_used_50_rep_1_filterStringent$data)
+
+png("./Results/Sumstats/frac0_pertx_all.png",
+  width     = 3.5,
+  height    = 3,
+  units     = "in",
+  res       = 200,
+  pointsize = 6) # start export
+
+# Plot the density without histogram
+plot(density(Tasic_lenient_frac0_pt), lwd = 2, col = "darkblue", 
+     main = "", 
+     xlim=c(0,1), 
+     ylim=c(0,6.5),
+     xlab = "Fraction zeros per transcript")
+
+# Add density
+lines(density(gtex_lenient_frac0_pt, adjust = 2), lwd = 2, col = "black")
+lines(density(gtex_stringent_frac0_pt, adjust = 2), lwd = 2, col = "grey72")
+lines(density(Tasic_stringent_frac0_pt), lwd = 2, col = "cyan")
+lines(density(Chen_lenient_frac0_pt), lwd = 2, col = "red")
+lines(density(Chen_stringent_frac0_pt), lwd = 2, col = "orange")
+lines(density(Darmanis_lenient_frac0_pt), lwd = 2, col = "darkgreen")
+lines(density(Darmanis_stringent_frac0_pt), lwd = 2, col = "green2")
+
+
+# Add a legend
+legend("topright", 
+  legend = c("Tasic lenient", "Tasic stringent",
+             "Chen lenient", "Chen stringent",
+             "Darmanis lenient", "Darmanis stringent",
+             "gtex lenient", "gtex stringent"), 
+  col = c("darkblue","cyan","red","orange","darkgreen","green2", "black", "grey72"), 
+  pch = 20, 
+  bty = "n", 
+  pt.cex = 3, 
+  cex = 1.2, 
+  text.col = "black", 
+  horiz = F)
+
+dev.off()
+```
+
+# Figure S32 panel D
+
+Fraction of binary genes per cell. A gene is called binary in a cell if only 1 
+isoform of that gene is expressed in that cell. Again, the highest fraction of 
+fraction of binary genes is observed of cells from the Darmanis dataset, 
+followed by the Tasic dataset, the Chen dataset and the GTEx dataset.
+
+```{r}
+getBinary <- function(dataset){
+  binary <- list()
+  tx2gene <- dataset$metaInfo[,c("TXNAME", "GENEID")]
+  
+  for (gene in unique(tx2gene$GENEID)) {
+    txs <- tx2gene[tx2gene$GENEID == gene,"TXNAME"]
+    count_per_gene_binary <- dataset$data[txs,]
+    count_per_gene_binary[count_per_gene_binary>0] <- 1
+    binary[[gene]] <- colSums(count_per_gene_binary) == 1
+  }
+  
+  binary_mat <- do.call("rbind",binary)
+  frac_binary <- colSums(binary_mat)/nrow(binary_mat)
+}
+```
+
+```{r}
+Tasic_lenient_fracBinary <- getBinary(TasicBenchmarkLenient$samples_used_200_rep_1_filterLenient)
+Tasic_stringent_fracBinary <- getBinary(TasicBenchmarkStringent$samples_used_200_rep_1_filterStringent)
+
+Chen_lenient_fracBinary <- getBinary(ChenBenchmarkLenient$samples_used_50_rep_1_filterLenient)
+Chen_stringent_fracBinary <- getBinary(ChenBenchmarkStringent$samples_used_50_rep_1_filterStringent)
+
+Darmanis_lenient_fracBinary <- getBinary(DarmanisBenchmarkLenient$samples_used_100_rep_1_filterLenient)
+Darmanis_stringent_fracBinary <- getBinary(DarmanisBenchmarkStringent$samples_used_100_rep_1_filterStringent)
+
+gtex_lenient_fracBinary <- getBinary(gtexBenchmarkDataLenient$samples_used_50_rep_1_filterLenient)
+gtex_stringent_fracBinary <- getBinary(gtexBenchmarkDataStringent$samples_used_50_rep_1_filterStringent)
+
+png("./Results/Sumstats/frac_binary_all.png",
+  width     = 3.5,
+  height    = 3,
+  units     = "in",
+  res       = 200,
+  pointsize = 6) # start export
+
+# Plot the density without histogram
+plot(density(Tasic_lenient_fracBinary), lwd = 2, col = "darkblue", 
+     main = "", 
+     xlim=c(0,1), 
+     ylim=c(0,25),
+     xlab = "Fraction binary genes per cell")
+
+# Add density
+lines(density(Tasic_stringent_fracBinary), lwd = 2, col = "cyan")
+lines(density(Chen_lenient_fracBinary), lwd = 2, col = "red")
+lines(density(Chen_stringent_fracBinary), lwd = 2, col = "orange")
+lines(density(Darmanis_lenient_fracBinary), lwd = 2, col = "darkgreen")
+lines(density(Darmanis_stringent_fracBinary), lwd = 2, col = "green2")
+lines(density(gtex_lenient_fracBinary), lwd = 2, col = "black")
+lines(density(gtex_stringent_fracBinary), lwd = 2, col = "grey72")
+
+# Add a legend
+legend("topright", 
+  legend = c("Tasic lenient", "Tasic stringent",
+             "Chen lenient", "Chen stringent",
+             "Darmanis lenient", "Darmanis stringent",
+             "gtex lenient", "gtex stringent"), 
+  col = c("darkblue","cyan","red","orange","darkgreen","green2", "black", "grey72"), 
+  pch = 20, 
+  bty = "n", 
+  pt.cex = 3, 
+  cex = 1.2, 
+  text.col = "black", 
+  horiz = F)
+
+dev.off()
+```
+
+
+
+
+
+
+
