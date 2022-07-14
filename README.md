@@ -1,6 +1,6 @@
-## satuRn: Scalable Analysis of Differential Transcript Usage for Bulk and Single-cell RNA-sequencing Applications
+# satuRn: Scalable Analysis of Differential Transcript Usage for Bulk and Single-cell RNA-sequencing Applications
 
-### Abstract
+## Abstract
 
 **Background**
 
@@ -31,13 +31,13 @@ satuRn is implemented as an R software package and is available on Github from h
 
 ***
 
-### Availability of data
+## Availability of data
 
 The datasets required to reproduce all results that are displayed in this publication (including supplementary materials) are available at Zenodo. This includes both the raw data and intermediate results. Note that at the top of each analysis script it is indicated which dataset is required as input for the script; it may thus not be necessary to download all datasets from [Zenodo](https://doi.org/10.5281/zenodo.4439415). For easily reproducing our analyses, place the downloaded data in the `Data` folder of your local clone of this repository.
 
 ***
 
-### Analyses & Scripts
+## Analyses & Scripts
 
 To reproduce the results that are displayed in this publication, proceed as follows:
 
@@ -58,30 +58,29 @@ This Github repository contains the following folders:
 
 `Scalability_benchmarks`: This folder contains all the code for reproducing the scalability benchmark analyses.
 
+## Additional analysis in paper version 2 after reviewer comments
 
+To accommodate the suggestions of the peer review, we included several 
+additional analyses in the satuRn publication. Again, scripts are available from
+Zenodo.
 
+`CaseStudy_complex_design`: This folder contains a script for performing a data
+analysis of the dataset of Tasic et al., but in contrast with the original case
+study we here include the categorical covariate gender and the continuus 
+covariate age in the specification of the DTU model.
 
+`CaseStudy_EC`: Here, we again analyse the dataset by Tasic et al., but upon
+quantifying the data on the level of equivalence classes as opposed to the 
+transcript level.
 
+`CaseStudy_exon`: Contains a script to analyse a dataset that has been 
+previously quantified on the exon level.
 
+`Scalability_benchmarks`: This folder has been extended to also perform a 
+scalability benchmark of the different algorithms on bulk data.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+`Sumstats`: This folder contains script to visualize and summarize some of the
+key summary statistics of the different dataset, e.g., library size 
+distributions, number of transcripts retained after filtering, etc. 
 
 
