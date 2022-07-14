@@ -1,0 +1,312 @@
+---
+title: "Differential exon usage analysis with satuRn and DEXSeq"
+author: "Jeroen Gilis"
+date: "08/07/2022"
+output:
+  html_document:
+    code_download: yes
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+    highlight: tango
+    number_sections: yes
+  pdf_document:
+    toc: yes
+---
+
+In order to demonstrate the ability of `satuRn` to perform a **differential**
+**exon usage (DEU) analysis**, as opposed to a differential transcript usage 
+(DTU) analysis, we perform the DEU analysis described in the 
+[vignette](https://bioconductor.org/packages/devel/bioc/vignettes/DEXSeq/inst/doc/DEXSeq.html) 
+of `DEXSeq`.
+
+In this script, we perform a DEU analysis on the same dataset as in the `DEXSeq`
+vignette, i.e. a subset of the `pasilla` bulk RNA-Seq dataset by (Brooks 
+*et al.*, 2011), which can be obtained with the Bioconductor experiment package 
+[pasilla](https://bioconductor.org/packages/release/data/experiment/html/pasilla.html).
+Brooks *et al.* investigated the effect of siRNA knock-down of the gene pasilla 
+on the transcriptome of fly S2-DRSC cells. The RNA-binding protein pasilla 
+protein is thought to be involved in the regulation of splicing. (Its mammalian 
+orthologs, NOVA1 and NOVA2, are well-studied examples of splicing factors.)
+
+- First, we repeat the `DEXSeq` analysis from the vignette. 
+
+- Second, we perform the same analysis using `satuRn`. 
+
+- **Finally and most interestingly**, the results produced by both methods are 
+compared. We find that the inference of `DEXSeq` is more liberal than that of
+`satuRn`. This is in line with our performance benchmarks for DTU analyses in 
+bulk RNA-Seq datasets, where we found that the inference of `DEXSeq` can be
+liberal in small sample settings. However, when ranking the DEU results in terms
+of statistical significance, `satuRn` and `DEXSeq` results display a very strong
+concordance.
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+# Load and wrangle data
+
+```{r load libraries, message=FALSE, warning=FALSE}
+library(satuRn)
+library(DEXSeq)
+library(pasilla)
+library(ggplot2)
+```
+
+```{r systemFile}
+pythonScriptsDir <- system.file("python_scripts", package="DEXSeq" )
+list.files(pythonScriptsDir)
+system.file( "python_scripts", package="DEXSeq", mustWork=TRUE )
+```
+
+```{r loadDEXSeq}
+inDir <- system.file("extdata", package="pasilla")
+countFiles <- list.files(inDir, pattern="fb.txt$", full.names=TRUE)
+basename(countFiles)
+flattenedFile <- list.files(inDir, pattern="gff$", full.names=TRUE)
+basename(flattenedFile)
+```
+
+```{r sampleTable}
+sampleTable <- data.frame(row.names = c( "treated1", "treated2", "treated3", 
+                                         "untreated1", "untreated2", "untreated3", 
+                                         "untreated4" ),
+                          condition = c("knockdown", "knockdown", "knockdown",  
+                                        "control", "control", "control", "control"),
+                          libType = c("single-end", "paired-end", "paired-end", 
+                                      "single-end", "single-end", "paired-end", "paired-end"))
+```
+
+```{r load, message=FALSE}
+dxd <- DEXSeqDataSetFromHTSeq(countFiles,
+                              sampleData = sampleTable,
+                              design = ~ sample + exon + libType:exon + condition:exon,
+                              flattenedfile = flattenedFile)
+genesForSubset <- read.table(file.path(inDir, "geneIDsinsubset.txt"), 
+                             stringsAsFactors=FALSE)[[1]]
+dxd <- dxd[geneIDs(dxd) %in% genesForSubset,]
+dxd # only 498 out of 70463 exons retained for vignette
+```
+
+```{r, message=FALSE}
+# remove exons with zero expression
+dxd <- dxd[rowSums(assay(dxd)) != 0,]
+
+# remove exons that are the only exon for a gene
+remove <- which(table(rowData(dxd)$groupID) == 1)
+dxd <- dxd[rowData(dxd)$groupID != names(remove),]
+```
+
+```{r}
+length(unique(rowData(dxd)$groupID))
+```
+
+# DEXSeq analysis
+
+```{r run DEXSeq, message=FALSE}
+dxd <- estimateSizeFactors(dxd)
+                           
+formulaFullModel    <-  ~ sample + exon + libType:exon + condition:exon
+formulaReducedModel <-  ~ sample + exon + libType:exon 
+
+dxd <- estimateDispersions(dxd, formula = formulaFullModel)
+dxd <- testForDEU(dxd, 
+                  reducedModel = formulaReducedModel, 
+                  fullModel = formulaFullModel)
+
+dxr <- DEXSeqResults(dxd, independentFiltering=FALSE)
+```
+
+
+```{r}
+all(dxd@rowRanges$LRTPvalue==dxr$pvalue, na.rm = TRUE)
+```
+
+```{r tallyExons}
+table(dxr$padj < 0.05)
+```
+
+---
+
+# satuRn analysis
+
+Here we perform the exact same analysis as above with our method `satuRn`.
+
+```{r load data, message=FALSE}
+dxd <- DEXSeqDataSetFromHTSeq(countFiles,
+                              sampleData=sampleTable,
+                              design= ~ sample + exon + libType:exon + condition:exon,
+                              flattenedfile=flattenedFile)
+genesForSubset <- read.table(file.path(inDir, "geneIDsinsubset.txt"), 
+                             stringsAsFactors=FALSE)[[1]]
+dxd <- dxd[geneIDs(dxd) %in% genesForSubset,]
+dxd # only 498 out of 70463 exons retained
+```
+
+```{r, message=FALSE}
+# remove exons with zero expression
+dxd <- dxd[rowSums(assay(dxd)) != 0,]
+
+# remove exons that are the only exon for a gene
+remove <- which(table(rowData(dxd)$groupID) == 1)
+dxd <- dxd[rowData(dxd)$groupID != names(remove),]
+```
+
+## Generate SummarizedExperiment object
+
+```{r prepare SummarizedExperiment, message=FALSE}
+exonInfo <- rowData(dxd)
+colnames(exonInfo)[1:2] <- c("isoform_id", "gene_id")
+exonInfo$isoform_id <- rownames(exonInfo)
+sumExp <- SummarizedExperiment::SummarizedExperiment(assays = list(counts=featureCounts(dxd)), 
+                                                     colData = sampleAnnotation(dxd), 
+                                                     rowData = exonInfo)
+```
+
+```{r}
+# remove exons with zero expression
+sumExp <- sumExp[rowSums(assay(sumExp)) != 0,]
+```
+
+
+## Fit quasibinomial model
+
+```{r, fit quasibinomial model}
+sumExp <- satuRn::fitDTU(object = sumExp,
+                           formula = ~ 0 + condition + libType,
+                           parallel = FALSE,
+                           BPPARAM = BiocParallel::bpparam(),
+                           verbose = TRUE)
+```
+
+## Create contrast matrix
+
+```{r create contrast matrix, message=FALSE}
+design <- model.matrix(~0 + sampleAnnotation(dxd)$condition + sampleAnnotation(dxd)$libType)
+colnames(design)[1:2] <- levels(as.factor(sampleAnnotation(dxd)$condition))
+
+L <- matrix(0, ncol = 1, nrow = ncol(design))
+rownames(L) <- colnames(design)
+colnames(L) <- "C1"
+L[c("control", "knockdown"), 1] <- c(1,-1)
+L
+```
+
+## Test for DEU
+
+```{r test for DEU}
+sumExp <- satuRn::testDTU(object = sumExp, 
+                          contrasts = L, 
+                          plot = TRUE,
+                          sort = F)
+```
+
+## Visualize DTU
+
+```{r}
+# get all (3) statistically significant differentially used exons
+DEU <- rownames(rowData(sumExp)[["fitDTUResult_C1"]][which(rowData(sumExp)[["fitDTUResult_C1"]]$empirical_FDR < 0.05),])
+
+group1 <- rownames(colData(sumExp))[colData(sumExp)$condition == "knockdown"]
+group2 <- rownames(colData(sumExp))[colData(sumExp)$condition == "control"]
+
+plots <- satuRn::plotDTU(object = sumExp,
+                         contrast = "C1",
+                         groups = list(group1,group2),
+                         coefficients = list(c(0,1,0),c(1,0,0)),
+                         summaryStat = "model",
+                         transcripts = DEU,
+                         genes = NULL,
+                         top.n = 6)
+# To have same layout as in our paper
+for (i in seq_along(plots)) {
+    current_plot <- plots[[i]] +
+        scale_fill_manual(labels = c("knockdown","control"),
+                          values=c("royalblue4", "firebrick")) + 
+        scale_x_discrete(labels= c("knockdown","control")) +
+        theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5, size = 9)) +
+        theme(strip.text = element_text(size = 9, face = "bold"))
+    
+    png(paste0("./Results/CaseStudy_exon/exon_",i,".png"),
+        width     = 5,
+        height    = 5,
+        units     = "in",
+        res       = 200,
+        pointsize = 4)
+    print(current_plot)
+    dev.off()
+}
+```
+
+# DEXSeq and satuRn comparison
+
+## Number of statistically significant findings
+
+```{r, number of significant DEU}
+table(dxr$padj < 0.05) # DEXSeq: 19 exons with an FDR below 0.05
+
+#table(rowData(sumExp)[["fitDTUResult_C1"]]$regular_FDR < 0.05) # satuRn: 7 exons with an FDR below 0.05
+table(rowData(sumExp)[["fitDTUResult_C1"]]$empirical_FDR < 0.05) # satuRn: 3 exons with an empirical FDR below 0.05
+```
+
+We see that the inference of `DEXSeq` is more liberal than that of
+`satuRn`. For this dataset, we do not have a ground truth, so this could either
+imply a higher power for `DEXSeq` to detect differentially used exons, or 
+suggest a inflate number of false positive findings for `DEXSeq`. Note that the 
+latter is in line with our performance benchmarks for DTU analyses in bulk 
+RNA-Seq dataset, where we found that the inference of `DEXSeq` can be liberal, 
+especially in small sample settings.
+
+## Comparison of top-ranked exons
+
+When we rank the DEU results in terms of statistical significance, `satuRn` and 
+`DEXSeq` results display a very strong concordance.
+
+Below, we compare the results in terms of the ranking of the top20 
+differentially used exons between the two methods.
+
+```{r comparison}
+comparison <- as.data.frame(rowData(sumExp)[,c(1,2)])
+comparison$rank_satuRn <- match(comparison$isoform_id,rownames(rowData(sumExp)[["fitDTUResult_C1"]])[order(rowData(sumExp)[["fitDTUResult_C1"]]$empirical_pval)])
+comparison$rank_DEXSeq <- match(comparison$isoform_id,rownames(dxr)[order(dxr$pvalue)])
+comparison$diffRank <- abs(comparison$rank_DEXSeq - comparison$rank_satuRn) # difference in ranks between both methods
+rownames(comparison) <- NULL
+colnames(comparison)[1] <- "exon_id"
+```
+
+```{r}
+comparison <- comparison[order(comparison$rank_DEXSeq),]
+head(comparison[1:4], n=20)
+```
+
+```{r}
+comparison <- comparison[order(comparison$rank_satuRn),]
+head(comparison[1:4], n=20)
+```
+
+When we rank the DEU results in terms of statistical significance, `satuRn` and 
+`DEXSeq` results display a very strong concordance. We can also show this 
+visually:
+
+```{r visualize comparison}
+plot(comparison$rank_satuRn, comparison$rank_DEXSeq, pch=20)
+abline(a=0,b=1,col="red",lwd=2)
+```
+
+# Conclusion
+
+In this document, we display the ability of `satuRn` to perform a 
+**differential exon usage (DEU) analysis**. We additionally compare our results
+with those of `DEXSeq`, which is arguably the most popular tool for performing
+DEU analyses.
+
+The main conclusion is that when the DEU results are ranked in terms of 
+statistical significance, `satuRn` and  `DEXSeq` results display a very strong 
+concordance.
+
+```{r}
+sessionInfo()
+```
+

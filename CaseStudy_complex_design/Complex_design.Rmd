@@ -1,0 +1,623 @@
+---
+title: "satuRn for analyses with complex designs"
+author: "Jeroen Gilis"
+date: "08/07/2022"
+output:
+  html_document:
+    code_download: yes
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+    highlight: tango
+    number_sections: yes
+  pdf_document:
+    toc: yes
+---
+
+In this script, we demonstrate satuRn’s ability to analyze datasets with complex
+experimental designs, we repeated the case study analysis on the single-cell 
+dataset from Tasic et al. but including a covariate for cell type, a covariate
+for the mouse’s gender, an interaction effect between cell type and gender, 
+and a continuous covariate for age. This script also generates **Figure 10**
+from the `satuRn` manuscript.
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+```{r, include=FALSE,message=FALSE,warning=FALSE}
+# for data import
+library(AnnotationHub)
+library(ensembldb)
+library(openxlsx)
+
+# for analysis
+library(satuRn)
+library(edgeR)
+library(SummarizedExperiment)
+library(stringr)
+
+# for visualization
+library(ggplot2)
+library(grid)
+library(gridExtra)
+```
+
+```{r, include=FALSE, message=FALSE}
+ah <- AnnotationHub() # Load the annotation resource.
+all <- query(ah, "EnsDb") # Query for all available EnsDb databases
+ahEdb <- all[["AH75036"]] # for Mus musculus
+txs <- transcripts(ahEdb)
+tx2gene <- as.data.frame(matrix(data = NA, nrow = length(txs), ncol = 2))
+colnames(tx2gene) <- c("TXNAME","GENEID")
+tx2gene$TXNAME <- txs$tx_id
+tx2gene$GENEID <- txs$gene_id
+```
+
+```{r, include=FALSE}
+Tasic_counts <- readRDS("./Data/Tasic_caseStudy_transcript_counts.Rds")
+# Already remove genes with zero counts in all cells
+Tasic_counts <- Tasic_counts[rowSums(Tasic_counts) != 0,]
+dim(Tasic_counts)
+```
+
+```{r, include=FALSE}
+access <- read.csv2("./Data/Tasic_metadata_2.csv",sep = "\t")
+access <- access[match(colnames(Tasic_counts),access$SRA_Run),]
+
+metaData <- openxlsx::read.xlsx("./Data/Tasic_metadata_1.xlsx")
+metaData <- metaData[match(access$sample_name,metaData$sample_name),]
+
+colnames(Tasic_counts) <- metaData$sample_name
+metaData <- metaData[metaData$core_intermediate_call == "Core",] # only retain cell that were unambiguously assigned to a certain cell type (cluster)
+Tasic_counts <- Tasic_counts[,metaData$sample_name]
+#metaData <- metaData[,c("sample_name", "brain_region","cluster")]
+```
+
+```{r, include=FALSE}
+metaData$cluster <- gsub(" ", "_", metaData$cluster)
+metaData$cluster <- paste(metaData$brain_region,metaData$cluster,sep=".")
+
+# Remove groups (cell types) with less than 30 cells --> removes 14 groups
+remove <- names(table(metaData$cluster)[table(metaData$cluster) < 30])
+
+metaData <- metaData[-which(metaData$cluster %in% remove),]
+cluster <- as.factor(metaData$cluster)
+```
+
+```{r, include=FALSE}
+# Remove transcripts that are the only isoform expressed of a certain gene
+txInfo <- tx2gene
+colnames(txInfo) <- c('isoform_id','gene_id')
+rownames(txInfo) <- NULL
+
+rownames(Tasic_counts) <- sub("\\..*", "", rownames(Tasic_counts))
+txInfo <- txInfo[txInfo$isoform_id %in% rownames(Tasic_counts),]
+txInfo <- subset(txInfo,duplicated(gene_id) | duplicated(gene_id, fromLast=TRUE))
+
+Tasic_counts <- Tasic_counts[which(rownames(Tasic_counts) %in% txInfo$isoform_id),]
+Tasic_counts <- Tasic_counts[,which(colnames(Tasic_counts) %in% metaData$sample_name)]
+dim(Tasic_counts)
+```
+
+```{r, include=FALSE}
+filter_all_edgeR_stringent <- filterByExpr(Tasic_counts,
+             design = NULL,
+             group = metaData$brain_region,
+             lib.size = NULL,
+             min.count = 10,
+             min.total.count = 0,
+             large.n = 0,
+             min.prop = 0.7)
+
+table(filter_all_edgeR_stringent)
+Tasic_counts <- Tasic_counts[filter_all_edgeR_stringent,]
+```
+
+```{r, include=FALSE}
+# Update txInfo according to the filtering procedure
+txInfo <- txInfo[which(txInfo$isoform_id %in% rownames(Tasic_counts)),]
+
+# remove transcripts that are the only isoform expressed of a certain gene (after filtering)
+txInfo <- subset(txInfo,duplicated(gene_id) | duplicated(gene_id, fromLast=TRUE))
+
+Tasic_counts <- Tasic_counts[which(rownames(Tasic_counts) %in% txInfo$isoform_id),]
+
+# satuRn require the transcripts in the rowData and the transcripts in the count matrix to be in the same order. If not, the resulting models will be matched to the wrong rowData
+txInfo <- txInfo[match(rownames(Tasic_counts),txInfo$isoform_id),]
+
+#rm(list = setdiff(ls(), c("Tasic_counts", "txInfo", "design", "metaData", "tx2gene","group")))
+invisible(gc())
+```
+
+```{r, include=FALSE, message=F}
+sumExp <- SummarizedExperiment::SummarizedExperiment(assays = list(counts=Tasic_counts), 
+                                                     colData = metaData, 
+                                                     rowData = txInfo)
+```
+
+# Original group only model
+
+For later comparison.
+
+## Fit models
+
+```{r}
+sumExp_cluster <- satuRn::fitDTU(object = sumExp,
+                               formula = ~ 0 + cluster,
+                               parallel = FALSE,
+                               BPPARAM = BiocParallel::bpparam(),
+                               verbose = TRUE
+                               )
+```
+
+## Set up contrast matrix
+
+```{r}
+# We here manually construct the contrast of interest as defined by Tasic et al.
+design <- model.matrix(~0+cluster)
+colnames(design) <- levels(cluster)
+
+L <- matrix(0, ncol = 8, nrow = ncol(design))
+rownames(L) <- colnames(design)
+colnames(L) <- c("C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8")
+
+L[c("VISp.L5_IT_VISp_Batf3", "ALM.L5_IT_ALM_Cpa6_Gpr88"), 1] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Col27a1", "ALM.L5_IT_ALM_Cbln4_Fezf2"), 2] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Col6a1_Fezf2", "ALM.L5_IT_ALM_Cpa6_Gpr88"), 3] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Col6a1_Fezf2", "ALM.L5_IT_ALM_Gkn1_Pcdh19"), 4] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Hsd11b1_Endou", "ALM.L5_IT_ALM_Lypd1_Gpr88"), 5] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Hsd11b1_Endou", "ALM.L5_IT_ALM_Tnc"), 6] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Hsd11b1_Endou", "ALM.L5_IT_ALM_Tmem163_Dmrtb1"), 7] <- c(1,-1)
+L[c("VISp.L5_IT_VISp_Whrn_Tox2", "ALM.L5_IT_ALM_Tmem163_Arhgap25"), 8] <- c(1,-1)
+```
+
+## Test contrasts with satuRn
+
+```{r}
+sumExp_cluster <- satuRn::testDTU(object = sumExp_cluster, 
+                                  contrasts = L, 
+                                  plot = T,
+                                  sort = F)
+```
+
+
+```{r}
+# the three transcripts we discussed in the paper
+rowData(sumExp_cluster)[["fitDTUResult_C6"]][c("ENSMUST00000081554",
+                                               "ENSMUST00000195963",
+                                               "ENSMUST00000132062"),]
+```
+
+# Invesitgate metadata
+
+Look again at all provided metadata
+
+```{r}
+head(colData(sumExp_cluster))
+```
+
+Performing an analysis with a fixed mouse effect is not feasible, since we
+have would too few cells per mouse/cell type combination. 
+
+```{r}
+table(sumExp_cluster$donor)
+```
+
+However, we can perform an analysis with an interaction effect between gender 
+and cell type.
+
+```{r}
+table(sumExp_cluster$cluster, sumExp_cluster$sex)
+```
+
+In addition, we can correct for age (continuous variable).
+
+```{r}
+table(sumExp_cluster$age_days)
+```
+
+# Model with gender interaction and corrected for age
+
+First clean the cluster only results
+
+```{r}
+sumExp_complex <- SummarizedExperiment(assays = assays(sumExp_cluster),
+                                       colData = colData(sumExp_cluster), 
+                                       rowData = rowData(sumExp_cluster)[c(1,2)])
+```
+
+## Fit the model.
+
+```{r}
+sumExp_complex <- satuRn::fitDTU(object = sumExp_cluster,
+                                 formula = ~ cluster*sex + age_days,
+                                 parallel = FALSE,
+                                 BPPARAM = BiocParallel::bpparam(),
+                                 verbose = TRUE)
+```
+
+## Construct design matrix.
+
+```{r}
+design <- model.matrix(~ sumExp_complex$cluster*sumExp_complex$sex + sumExp_complex$age_days)
+colnames(design) <- str_remove_all(colnames(design), "sumExp_complex\\$cluster")
+colnames(design) <- str_remove_all(colnames(design), "sumExp_complex\\$sex")
+colnames(design) <- str_remove_all(colnames(design), "sumExp_complex\\$")
+
+L2 <- matrix(0, ncol = 15, nrow = ncol(design))
+rownames(L2) <- colnames(design)
+colnames(L2) <- c("C1", "C2", "C3", "C4", "C5", "C6", 
+                  "C7", "C8", "C9", "C10", "C11", "C12",
+                  "C13", "C14", "C15")
+
+# cell type vs. cell type (1)
+L2[c("VISp.L5_IT_VISp_Batf3", "VISp.L5_IT_VISp_Batf3:M",  
+    "ALM.L5_IT_ALM_Cpa6_Gpr88", "ALM.L5_IT_ALM_Cpa6_Gpr88:M"), "C1"] <- c(1, 1/2, -1, -1/2)
+
+# cell type vs. cell type (2)
+L2[c("VISp.L5_IT_VISp_Col27a1", "VISp.L5_IT_VISp_Col27a1:M"), "C2"] <- c(1, 1/2)
+
+# cell type vs. cell type (3)
+L2[c("VISp.L5_IT_VISp_Col6a1_Fezf2", "VISp.L5_IT_VISp_Col6a1_Fezf2:M",
+    "ALM.L5_IT_ALM_Cpa6_Gpr88", "ALM.L5_IT_ALM_Cpa6_Gpr88:M"), "C3"] <- c(1, 1/2, -1, -1/2)
+
+# cell type vs. cell type (4)
+L2[c("VISp.L5_IT_VISp_Col6a1_Fezf2", "VISp.L5_IT_VISp_Col6a1_Fezf2:M",
+    "ALM.L5_IT_ALM_Gkn1_Pcdh19", "ALM.L5_IT_ALM_Gkn1_Pcdh19:M"), "C4"] <- c(1, 1/2, -1, -1/2)
+
+# cell type vs. cell type (5)
+L2[c("VISp.L5_IT_VISp_Hsd11b1_Endou", "VISp.L5_IT_VISp_Hsd11b1_Endou:M", 
+    "ALM.L5_IT_ALM_Lypd1_Gpr88", "ALM.L5_IT_ALM_Lypd1_Gpr88:M"), "C5"] <- c(1, 1/2, -1, -1/2)
+
+# cell type vs. cell type (6)
+L2[c("VISp.L5_IT_VISp_Hsd11b1_Endou", "VISp.L5_IT_VISp_Hsd11b1_Endou:M",
+    "ALM.L5_IT_ALM_Tnc", "ALM.L5_IT_ALM_Tnc:M"), "C6"] <- c(1, 1/2, -1, -1/2)
+
+# cell type vs. cell type (7)
+L2[c("VISp.L5_IT_VISp_Hsd11b1_Endou", "VISp.L5_IT_VISp_Hsd11b1_Endou:M", 
+    "ALM.L5_IT_ALM_Tmem163_Dmrtb1", "ALM.L5_IT_ALM_Tmem163_Dmrtb1:M"), "C7"] <- c(1, 1/2, -1, -1/2)
+
+# cell type vs. cell type (8)
+L2[c("VISp.L5_IT_VISp_Whrn_Tox2", "VISp.L5_IT_VISp_Whrn_Tox2:M",
+    "ALM.L5_IT_ALM_Tmem163_Arhgap25", "ALM.L5_IT_ALM_Tmem163_Arhgap25:M"), "C8"] <- c(1, 1/2, -1, -1/2)
+
+# gender effect averaged over all fitted (14) cell types
+L2[c("M",
+     "ALM.L5_IT_ALM_Cpa6_Gpr88:M",
+     "ALM.L5_IT_ALM_Gkn1_Pcdh19:M",       
+     "ALM.L5_IT_ALM_Lypd1_Gpr88:M",       
+     "ALM.L5_IT_ALM_Npw:M",             
+     "ALM.L5_IT_ALM_Pld5:M",              
+     "ALM.L5_IT_ALM_Tmem163_Arhgap25:M",  
+     "ALM.L5_IT_ALM_Tmem163_Dmrtb1:M",   
+     "ALM.L5_IT_ALM_Tnc:M",              
+     "VISp.L5_IT_VISp_Batf3:M",           
+     "VISp.L5_IT_VISp_Col27a1:M",         
+     "VISp.L5_IT_VISp_Col6a1_Fezf2:M",    
+     "VISp.L5_IT_VISp_Hsd11b1_Endou:M",   
+     "VISp.L5_IT_VISp_Whrn_Tox2:M"), "C9"] <- c(1,rep(1/14,13))
+
+# age effect
+L2["age_days", "C10"] <- 1
+
+# gender effect in Tnc cells
+L2[c("M",
+     "ALM.L5_IT_ALM_Tnc:M"), "C11"] <- c(1,1)
+
+# gender effect in Hsd11b1_Endou cells
+L2[c("M",
+     "VISp.L5_IT_VISp_Hsd11b1_Endou:M"), "C12"] <- c(1,1)
+
+# Hsd11b1_Endou vs. Tnc cells in females
+L2[c("VISp.L5_IT_VISp_Hsd11b1_Endou", "ALM.L5_IT_ALM_Tnc"), "C13"] <- c(1, -1)
+
+# Hsd11b1_Endou vs. Tnc cells in males
+L2[c("VISp.L5_IT_VISp_Hsd11b1_Endou", "VISp.L5_IT_VISp_Hsd11b1_Endou:M",
+    "ALM.L5_IT_ALM_Tnc", "ALM.L5_IT_ALM_Tnc:M"), "C14"] <- c(1, 1, -1, -1)
+
+# the difference of the Hsd11b1_Endou vs Tnc cells effect between females and males
+L2[c("VISp.L5_IT_VISp_Hsd11b1_Endou:M",
+     "ALM.L5_IT_ALM_Tnc:M"), "C15"] <- c(-1, 1)
+L2
+```
+
+## Perform DTU testing
+
+```{r}
+sumExp_complex <- satuRn::testDTU(object = sumExp_complex, 
+                            contrasts = L2,
+                            sort = T) 
+# each dataframe is sorted based on empirical p-values
+```
+
+Initial comparison of results for contrast and transcripts in the paper:
+
+```{r}
+rowData(sumExp_complex)[["fitDTUResult_C6"]][c("ENSMUST00000081554",
+                                               "ENSMUST00000195963",
+                                               "ENSMUST00000132062"),]
+```
+
+```{r}
+rowData(sumExp_cluster)[["fitDTUResult_C6"]][c("ENSMUST00000081554",
+                                               "ENSMUST00000195963",
+                                               "ENSMUST00000132062"),]
+```
+
+# Number of DTU for the different contrasts
+
+## Without gender and age correction
+
+```{r}
+sum(rowData(sumExp_cluster)[["fitDTUResult_C1"]]$empirical_FDR < 0.05, na.rm = T)
+sum(rowData(sumExp_cluster)[["fitDTUResult_C2"]]$empirical_FDR < 0.05, na.rm = T)
+sum(rowData(sumExp_cluster)[["fitDTUResult_C3"]]$empirical_FDR < 0.05, na.rm = T)
+sum(rowData(sumExp_cluster)[["fitDTUResult_C4"]]$empirical_FDR < 0.05, na.rm = T)
+sum(rowData(sumExp_cluster)[["fitDTUResult_C5"]]$empirical_FDR < 0.05, na.rm = T)
+sum(rowData(sumExp_cluster)[["fitDTUResult_C6"]]$empirical_FDR < 0.05, na.rm = T)
+sum(rowData(sumExp_cluster)[["fitDTUResult_C7"]]$empirical_FDR < 0.05, na.rm = T)
+sum(rowData(sumExp_cluster)[["fitDTUResult_C8"]]$empirical_FDR < 0.05, na.rm = T)
+```
+
+## With gender and age correction
+
+```{r}
+# same 8 contrasts as above, but with correction for age and gender
+sum(rowData(sumExp_complex)[["fitDTUResult_C1"]]$empirical_FDR < 0.05, na.rm = T)
+sum(rowData(sumExp_complex)[["fitDTUResult_C2"]]$empirical_FDR < 0.05, na.rm = T)
+sum(rowData(sumExp_complex)[["fitDTUResult_C3"]]$empirical_FDR < 0.05, na.rm = T)
+sum(rowData(sumExp_complex)[["fitDTUResult_C4"]]$empirical_FDR < 0.05, na.rm = T)
+sum(rowData(sumExp_complex)[["fitDTUResult_C5"]]$empirical_FDR < 0.05, na.rm = T)
+sum(rowData(sumExp_complex)[["fitDTUResult_C6"]]$empirical_FDR < 0.05, na.rm = T)
+sum(rowData(sumExp_complex)[["fitDTUResult_C7"]]$empirical_FDR < 0.05, na.rm = T)
+sum(rowData(sumExp_complex)[["fitDTUResult_C8"]]$empirical_FDR < 0.05, na.rm = T)
+cat("\n")
+# new contrasts
+sum(rowData(sumExp_complex)[["fitDTUResult_C9"]]$empirical_FDR < 0.05, na.rm = T)
+sum(rowData(sumExp_complex)[["fitDTUResult_C10"]]$empirical_FDR < 0.05, na.rm = T)
+sum(rowData(sumExp_complex)[["fitDTUResult_C11"]]$empirical_FDR < 0.05, na.rm = T)
+sum(rowData(sumExp_complex)[["fitDTUResult_C12"]]$empirical_FDR < 0.05, na.rm = T)
+sum(rowData(sumExp_complex)[["fitDTUResult_C13"]]$empirical_FDR < 0.05, na.rm = T)
+sum(rowData(sumExp_complex)[["fitDTUResult_C14"]]$empirical_FDR < 0.05, na.rm = T)
+sum(rowData(sumExp_complex)[["fitDTUResult_C15"]]$empirical_FDR < 0.05, na.rm = T)
+```
+
+# Figure 10
+
+**The difference of the Hsd11b1_Endou vs Tnc cell type effect between females** 
+**and males.**
+
+Including gender and age in the model has a threefold purpose. First, gender and
+age can be considered confounders, extraneous variables that can potentially 
+distort the cell type direct effect. Not accounting for such confounders may 
+result in biased parameter estimates. Second, including gender and age in the 
+model can allow the model to explain a larger part of the observed varability in
+the data, reducing the error term of the model, and resulting in a smaller 
+standard error on the parameter estimates (thus increasing statistical power).
+Third, the added covariates themselves could be of research interest.
+
+In this case study, we could be interested in how the cell type effect of 
+comparing Hsd11b1 Endou cells with Tnc cells is different between female and
+male cells. This effect was assessed in contrast C15 of the satuRn analysis;
+
+```{r}
+rowData(sumExp_complex)[["fitDTUResult_C15"]][1:6,-c(4,5,6)]
+```
+
+As an example, we inspect the usage profiles of transcript ENSMUST00000145174. 
+The difference in transcript usage of ENSMUST00000145174 between Hsd11b1_Endou 
+cells and Tnc cells is significantly different (empirical FDR = 0.003553) 
+between female and male mice. While for female mice there is evidence for DTU 
+(empirical FDR = 0.01258), no such evidence was observed in male mice 
+(empirical FDR = 0.9830).
+
+We can here visualize this effect. 
+
+First, we visualize the cell type effect for female mice;
+
+```{r}
+group1 <- colnames(sumExp_complex)[which(sumExp_complex$sex == "F" &
+                                    sumExp_complex$cluster == "VISp.L5_IT_VISp_Hsd11b1_Endou")]
+group2 <- colnames(sumExp_complex)[which(sumExp_complex$sex == "F" &
+                                    sumExp_complex$cluster == "ALM.L5_IT_ALM_Tnc")]
+
+# average age in selected female cells
+F_age_1 <- mean(colData(sumExp_complex)[which(sumExp_complex$sex == "F" &
+                                                sumExp_complex$cluster == "VISp.L5_IT_VISp_Hsd11b1_Endou"),
+                                        "age_days"])
+F_age_2 <- mean(colData(sumExp_complex)[which(sumExp_complex$sex == "F" &
+                                                sumExp_complex$cluster == "ALM.L5_IT_ALM_Tnc"),
+                                        "age_days"])
+
+# Getting these contrasts manually like this is a pain and error-prone!!
+coefs1 <- c(1,rep(0,11),1,0,0,F_age_1,rep(0,11),0,0)
+coefs2 <- c(1,rep(0,7),1,rep(0,5),0,F_age_2,rep(0,7),0,rep(0,5))
+
+plots_females <- satuRn::plotDTU(object = sumExp_complex, 
+                                 contrast = "C13", 
+                                 groups = list(group1,group2), 
+                                 coefficients = list(coefs1,coefs2), 
+                                 summaryStat = c("mean", "model"), 
+                                 transcripts = "ENSMUST00000145174",
+                                 genes = NULL,
+                                 top.n = 6)
+
+plots_females <- plots_females[[1]] + 
+    scale_fill_manual(labels = c("VISp","ALM"), values=c("royalblue4", "firebrick")) +
+    scale_x_discrete(labels= c("Hsd11b1_Endou","Tnc")) +
+    theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5, size = 9)) + 
+    theme(strip.text = element_text(size = 9, face = "bold")) + 
+    ggtitle("ENSMUST00000145174: Females")
+
+png("./Results/CaseStudy_complex_design/ENSMUST00000145174_Females.png",
+    width     = 5,
+    height    = 5,
+    units     = "in",
+    res       = 200,
+    pointsize = 4)
+plots_females
+dev.off()
+```
+
+For female mice, the usage of transcript ENSMUST00000145174 is significantly 
+different between Hsd11b1_Endou cells and Tnc cells (empirical FDR = 0.01258).
+
+Next, we visualize the cell type effect for male mice;
+
+```{r}
+group1 <- colnames(sumExp_complex)[which(sumExp_complex$sex == "M" &
+                                    sumExp_complex$cluster == "VISp.L5_IT_VISp_Hsd11b1_Endou")]
+group2 <- colnames(sumExp_complex)[which(sumExp_complex$sex == "M" &
+                                    sumExp_complex$cluster == "ALM.L5_IT_ALM_Tnc")]
+
+
+M_age_1 <- mean(colData(sumExp_complex)[which(sumExp_complex$sex == "M" &
+                                                sumExp_complex$cluster == "VISp.L5_IT_VISp_Hsd11b1_Endou"),
+                                        "age_days"])
+M_age_2 <- mean(colData(sumExp_complex)[which(sumExp_complex$sex == "M" &
+                                                sumExp_complex$cluster == "ALM.L5_IT_ALM_Tnc"),
+                                        "age_days"])
+
+coefs1 <- c(1,rep(0,11),1,0,0,M_age_1,rep(0,11),1,0)
+coefs2 <- c(1,rep(0,7),1,rep(0,5),0,M_age_2,rep(0,7),1,rep(0,5))
+
+plots_males <- satuRn::plotDTU(object = sumExp_complex, 
+                               contrast = "C14", 
+                               groups = list(group1,group2), 
+                               coefficients = list(coefs1,coefs2), 
+                               summaryStat = c("mean", "model"), 
+                               transcripts = "ENSMUST00000145174",
+                               genes = NULL,
+                               top.n = 6)
+
+plots_males <- plots_males[[1]] + 
+    scale_fill_manual(labels = c("VISp","ALM"), values=c("royalblue4", "firebrick")) +
+    scale_x_discrete(labels= c("Hsd11b1_Endou","Tnc")) +
+    theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5, size = 9)) + 
+    theme(strip.text = element_text(size = 9, face = "bold")) + 
+    ggtitle("ENSMUST00000145174: Males")
+
+png("./Results/CaseStudy_complex_design/ENSMUST00000145174_Males.png",
+    width     = 5,
+    height    = 5,
+    units     = "in",
+    res       = 200,
+    pointsize = 4)
+plots_males
+dev.off()
+```
+
+For male mice, the usage of transcript ENSMUST00000145174 does not differ 
+significantly between Hsd11b1_Endou cells and Tnc cells (empirical FDR = 0.983).
+
+Finally, we may inspect the difference of the cell type effect between the two
+genders, which is statistically significant (empFDR = 0.003553);
+
+```{r}
+plots_females <- plots_females + ggtitle("ENSMUST00000145174 - ENSMUSG00000029603")
+plots_males <- plots_males + ggtitle("")
+
+grid.arrange(plots_females,
+             plots_males,
+             padding = unit(3, "line"),
+             ncol=2,
+             top = textGrob("Females versus males (empFDR =  0.003553)",
+                            gp=gpar(fontsize=12, fontface="bold")))
+```
+
+# Effect of including covariates on the cell type effect
+
+For some transcripts, the cell type effect of comparing Hsd11b1 Endou cells
+with Tnc cells may be affected by correcting the analysis for potential
+gender and age effects. Including gender and age in the model here has a
+twofold purpose. First, gender and age can be considered confounders, extraneous
+variables that can potentially distort the cell type direct effect. Not 
+accounting for such confounders may result in biased parameter estimates. 
+Second, including gender and age in the model can allow the model to explain
+a larger part of the observed variability in the data, reducing the error term 
+of the model, and resulting in a smaller standard error on the parameter 
+estimates (thus increasing statistical power).
+
+Here, we display the effect of including gender and age in the model for
+transcript ENSMUST00000198199. When not including these covariates, transcript 
+ENSMUST00000198199 had the 8th smallest (empirical) FDR in the comparison
+of Hsd11b1 Endou cells and Tnc cells (empFDR = 1.884742e-11). Upon including the
+covariates, the ENSMUST00000198199 became the 68th most significant transcript
+in the prioritization top list (empFDR = 1.068366e-05).
+
+```{r}
+# also order based on empirical p-values
+res_C6_notCorrected <- rowData(sumExp_cluster)[["fitDTUResult_C6"]]
+res_C6_notCorrected <- res_C6_notCorrected[order(res_C6_notCorrected$empirical_pval, 
+                                                 decreasing = F),]
+res_C6_notCorrected["ENSMUST00000198199",-c(5,6)]
+
+rowData(sumExp_complex)[["fitDTUResult_C6"]]["ENSMUST00000198199",-c(5,6)]
+
+which(rownames(res_C6_notCorrected) == "ENSMUST00000198199") # 8th smallest significance
+which(rownames(rowData(sumExp_complex)[["fitDTUResult_C6"]]) == "ENSMUST00000198199") # 68th smallest significance
+```
+
+Here, we visualize the cell type effect, both without and with correction for 
+gender and age.
+
+```{r}
+################################################################################
+# ENSMUST00000198199: without correction for gender and age
+################################################################################
+
+group1 <- colnames(sumExp_cluster)[sumExp_cluster$cluster == "VISp.L5_IT_VISp_Hsd11b1_Endou"]
+group2 <- colnames(sumExp_cluster)[sumExp_cluster$cluster == "ALM.L5_IT_ALM_Tnc"]
+coefs1 <- rep(0,14)
+coefs1[13] <- 1
+coefs2 <- rep(0,14)
+coefs2[9] <- 1
+
+plots_cluster <- satuRn::plotDTU(object = sumExp_cluster, 
+                                 contrast = "C6", 
+                                 groups = list(group1,group2), 
+                                 coefficients = list(coefs1,coefs2), 
+                                 summaryStat = c("mean", "model"), 
+                                 transcripts = "ENSMUST00000198199",
+                                 genes = NULL,
+                                 top.n = 6)
+
+plots_cluster[[1]] + 
+    scale_fill_manual(labels = c("VISp","ALM"), values=c("royalblue4", "firebrick")) +
+    scale_x_discrete(labels= c("Hsd11b1_Endou","Tnc")) +
+    theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5, size = 9)) + 
+    theme(strip.text = element_text(size = 9, face = "bold"))
+
+################################################################################
+# ENSMUST00000198199: with correction for gender and age
+################################################################################
+
+group1 <- colnames(sumExp_complex)[sumExp_complex$cluster == "VISp.L5_IT_VISp_Hsd11b1_Endou"]
+group2 <- colnames(sumExp_complex)[sumExp_complex$cluster == "ALM.L5_IT_ALM_Tnc"]
+
+age_1 <- mean(colData(sumExp_complex)[group1, "age_days"])
+age_2 <- mean(colData(sumExp_complex)[group2, "age_days"])
+
+# Getting these contrasts manually like this is a pain and error-prone!!
+coefs1 <- c(1,rep(0,11),1,0,1/2, age_1,rep(0,11),1/2,0)
+coefs2 <- c(1,rep(0,7),1,rep(0,5),1/2, age_2,rep(0,7),1/2,rep(0,5))
+
+plots_complex <- satuRn::plotDTU(object = sumExp_complex, 
+                                 contrast = "C6", 
+                                 groups = list(group1,group2), 
+                                 coefficients = list(coefs1,coefs2), 
+                                 summaryStat = c("mean", "model"), 
+                                 transcripts = "ENSMUST00000198199",
+                                 genes = NULL,
+                                 top.n = 6)
+
+plots_complex[[1]] + 
+    scale_fill_manual(labels = c("VISp","ALM"), values=c("royalblue4", "firebrick")) +
+    scale_x_discrete(labels= c("Hsd11b1_Endou","Tnc")) +
+    theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5, size = 9)) + 
+    theme(strip.text = element_text(size = 9, face = "bold"))
+
+```
+
