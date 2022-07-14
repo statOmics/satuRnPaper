@@ -1,0 +1,785 @@
+---
+title: "satuRn: Effect of filtering and abundance measure on performance"
+author: "Jeroen Gilis"
+date: "08/07/2022"
+output:
+  html_document:
+    code_download: yes
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+    highlight: tango
+    number_sections: yes
+  pdf_document:
+    toc: yes
+---
+
+We have followed the reviewer’s suggestion of including simplified figures 
+that compare the different filtering and counting approaches on a single plot 
+per tool. These figures have been included as `Extended data Figures S10-S13`
+and are discussed in the “Performance on simulated bulk RNA-seq datasets” 
+paragraph in the Results section of the manuscript.
+
+These figures show more clearly that neither sample size nor the filtering 
+strategy had a profound impact on the ranking of the performances of the 
+different DTU methods; satuRn, DEXSeq and DoubleExpSeq remain the best 
+performing methods overall. However, we did find that the effects of filtering 
+and counting differ between the different datasets.
+
+For the Love et al. simulated bulk dataset, filtering more stringently strongly
+improves performance. In addition, both performance and FDR control are much 
+better when using scaledTPM abundances, as compared to using counts. The strong 
+positive effect of using scaledTPM abundances are only observed for this 
+dataset, which we further discuss in our manuscript. 
+
+For the simulated bulk datasets by Van den Berge et al., we also observe a 
+positive effect of stringent filtering. The difference between scaledTPM and 
+raw count abundances is negligible.
+
+For the real datasets, a quite different pattern is observed. For the GTEx 
+bulk dataset and the single-cell datasets by Tasic et al. and Chen et al., 
+the effects of filtering are limited and using counts performs slightly better 
+than using scaledTPM abundances.
+
+Finally, stringent filtering had a strong positive impact on performance on the
+Darmanis et al. dataset. Note that this dataset is by far the sparsest dataset 
+in our benchmarks (Extended data Figure S32 and Table S1). The differences in 
+performance between scaledTPM and raw count abundances are small.
+
+Taken together, using scaledTPM abundances is only beneficial in the simulations
+by Love et al., for reasons we explain in below. Therefore, we recommend using 
+raw counts abundances. With respect to filtering, the more stringent DRIMSeq 
+filtering strategy only seems beneficial in simulated data and in very sparse 
+single-cell data. Thus, for bulk data and regular single-cell data the lenient 
+edgeR filtering strategy seems sufficient to increase the signal-to-noise ratio.
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+# Load libraries
+
+```{r,message=FALSE,warning=FALSE}
+library(ggplot2)
+library(iCOBRA)
+library(stringr)
+library(purrr)
+library(gridExtra)
+```
+
+# Helper functions
+
+## computePlot
+
+```{r}
+computePlot <- function(result, metadata, print = FALSE){
+  
+  # loop over independent datasets (repeats must be joined)
+  names_norep <- str_replace(names(result), 
+                             pattern = "_rep_\\d_", 
+                             replacement = "_")
+  names_norep <- levels(as.factor(names_norep))
+  
+  # store resulting plots
+  plotlist <- list()
+  
+  for (analysis in seq_along(names_norep)) {
+    
+    # select the current datasets
+    current_name <- names_norep[analysis]
+    matches <- which(str_replace(names(result), 
+                                 pattern = "_rep_\\d_", 
+                                 replacement = "_") 
+                     == current_name)
+    current_result <- result[matches]
+    matches <- which(str_replace(names(metadata), 
+                                 pattern = "_rep_\\d_", 
+                                 replacement = "_") 
+                     == gsub(".*samples", "samples", current_name))
+    current_metadata <- metadata[matches]
+    
+    # Get relevant results (TXNAME and p_value) from nested list
+    # Append results from the repeats for correct FDR-TPR calculations
+    # TODO: how to do this with purrr::map_depth()
+    pvalues <- c()
+    TXNAMES_res <- c()
+    TXNAMES_meta <- c()
+    txSwapped <- c()
+    for (i in seq_along(current_result)) {
+      pvalues <- c(pvalues, current_result[[i]]$dtuAnalysis$p_value)
+      TXNAMES_res <- c(TXNAMES_res, paste0(current_result[[i]]$dtuAnalysis$TXNAME, "_", i))
+      TXNAMES_meta <- c(TXNAMES_meta, paste0(current_metadata[[i]]$metaInfo$TXNAME, "_", i))
+      txSwapped <- c(txSwapped, current_metadata[[i]]$metaInfo$txSwapped)
+    }
+    
+    # match results with ground truth
+    txSwapped <- txSwapped[match(TXNAMES_res,TXNAMES_meta)]
+    
+    # wrangle for iCOBRA input
+    pval_cobra <- as.data.frame(cbind(pvalues))
+    rownames(pval_cobra) <- TXNAMES_res
+    truth_cobra <- as.data.frame(cbind(txSwapped))
+    rownames(truth_cobra) <- TXNAMES_res
+    if(max(truth_cobra$txSwapped) == 2){
+      truth_cobra$txSwapped <- ifelse(truth_cobra$txSwapped == 1, 0, 1)
+    }
+    if(is.character(truth_cobra$txSwapped)){
+      truth_cobra$txSwapped <- as.factor(as.numeric(truth_cobra$txSwapped))
+    }
+    
+    # create sensible "method" name
+    quant <- tail(str_split(current_name, "_")[[1]], n=1)
+    filter <- tail(str_split(current_name, "_")[[1]], n=2)[1]
+    filter <- tolower(gsub("filter", "", filter))
+    colnames(pval_cobra) <- paste0(quant, "_", filter)
+    
+    # use iCOBRA to create plot
+    cobra <- COBRAData(pval = pval_cobra, truth = truth_cobra)
+    cobra <- calculate_adjp(cobra)
+    cobra1perf <- suppressMessages(
+      calculate_performance(cobra, 
+                            binary_truth = "txSwapped", 
+                            cont_truth = "none", 
+                            splv = "none", 
+                            aspects = c("fdrtpr", "fdrtprcurve", "overlap"))
+    )
+    cobraplot <- prepare_data_for_plot(cobra1perf, 
+                                       colorscheme = "Dark2", 
+                                       facetted = TRUE)
+    
+    if(print == TRUE){
+      pp <- plot_fdrtprcurve(cobraplot)
+      print(pp)
+    }
+    
+    # store plot
+    plotlist[[analysis]] <- cobraplot
+  }
+  
+  names(plotlist) <- names_norep
+  return(plotlist)
+}
+```
+
+## makePlot
+
+```{r}
+makePlot <- function(plotlist, 
+                     colors,
+                     dataset,
+                     type = "cells",
+                     xaxisrange = c(0, 0.4),
+                     yaxisrange = c(0, 1),
+                     linewidth = 1,
+                     pointsize = 3,
+                     stripsize = 15,
+                     titlecol = "black"){
+  
+  plot_data_lines <- list()
+  plot_data_points <- list()
+  
+  for (i in seq_along(plotlist)) {
+    plot_data_lines[[i]] <- fdrtprcurve(plotlist[[i]])
+    plot_data_points[[i]] <- fdrtpr(plotlist[[i]])
+  }
+  
+  plot_data_lines <- do.call(rbind, plot_data_lines)
+  plot_data_points <- do.call(rbind, plot_data_points)
+  
+  xasp <- "FDR"
+  yasp <- "TPR"
+  
+  thresholds <- sort(unique(as.numeric(gsub("thr", "", plot_data_points$thr))))
+  plot_data_points$method2.satis <- paste0(plot_data_points$method,
+                                           plot_data_points$satis)
+  
+  if (!(isTRUE(facetted(plotlist[[1]])))) {
+    plot_data_points$method <- plot_data_points$fullmethod
+    plot_data_lines$method <- plot_data_lines$fullmethod
+    plot_data_points$method2.satis <- paste0(plot_data_points$fullmethod,
+                                             plot_data_points$satis)
+  }
+  
+  ## Number of colors/linetypes
+  nlevs <- length(unique(plot_data_lines$method))
+  ## Number of thresholds
+  nthr <- length(unique(plot_data_points$thr))
+  
+  # Get desired colors
+  newcol <- c(plotcolors(plotlist[[1]]),
+              plotcolors(plotlist[[2]]),
+              plotcolors(plotlist[[3]]),
+              plotcolors(plotlist[[4]]))
+  newcol[c(1,5,13,17,25,29,37,41)]<- rep(colors,  each = 2)
+  
+  # construct title
+  method <- gsub("_samples.*", "", names(plotlist)[1])
+  nCells <- str_extract(names(plotlist)[1], "[[:digit:]]+")
+  title <- paste0(dataset, ": ", nCells, " ", type, " (", method, ")")
+  
+  pp <- ggplot(plot_data_lines, 
+               aes_string(x = xasp, y = yasp, group = "method", colour = "method")) + 
+    geom_vline(xintercept = seq(0, xaxisrange[2], 0.1), 
+               colour = "lightgrey", linetype = "dashed") + 
+    geom_vline(xintercept = thresholds, linetype = "dashed") + 
+    geom_path(size = linewidth, aes_string(linetype = "method")) + 
+    scale_linetype_manual(values = rep("solid", nlevs), guide = "none") + 
+    geom_point(data = plot_data_points, 
+               size = pointsize, 
+               aes_string(fill = "method2.satis", colour = "method", shape = "thr"), 
+               stroke = 1) + 
+    scale_shape_manual(values = rep(21, nthr), guide = "none") + 
+    scale_fill_manual(values = newcol, guide = "none", name = "") +
+    scale_color_manual(values = newcol,
+                       name = "", limits = force) +
+    ylim(yaxisrange[1], yaxisrange[2]) + 
+    scale_x_continuous(breaks = c(thresholds, seq(0, xaxisrange[2], 0.1)), 
+                       labels = c(thresholds, "", seq(0, xaxisrange[2], 0.1)[-1]), 
+                       limits = c(xaxisrange[1], xaxisrange[2])) +
+    ggtitle(title) +
+    theme_grey() + 
+    theme(legend.position = "none", 
+          panel.background = element_rect(fill = "white", colour = "black"),
+          panel.grid.minor.x = element_blank(), 
+          panel.grid.minor.y = element_blank(), 
+          strip.text = element_text(size = 15), 
+          strip.background = element_rect(fill = NA, colour = "black"), 
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 10), 
+          axis.text.y = element_text(size = 10), 
+          axis.title.x = element_text(size = 12), 
+          axis.title.y = element_text(size = 12), 
+          plot.title = element_text(face = "bold", colour = "black"))
+  
+  return(pp)
+}
+```
+
+# Tasic analysis
+
+## Get metadata
+
+```{r}
+# meta-info for counts based analyses
+load(file="./Data/Tasic_benchmark_datasets_count.Rdata")
+metaInfo_counts <- c(TasicBenchmarkLenient,TasicBenchmarkStringent)
+names(metaInfo_counts) <- paste0(names(metaInfo_counts), "_counts")
+
+# meta-info for scaledTPM based analyses
+load(file="./Data/Tasic_benchmark_datasets_scaledTPM.Rdata")
+metaInfo_sTPM <- c(TasicBenchmarkLenient,TasicBenchmarkStringent)
+names(metaInfo_sTPM) <- paste0(names(metaInfo_sTPM), "_sTPM")
+
+metaInfo <- c(metaInfo_counts, metaInfo_sTPM)
+```
+
+## Get results
+
+```{r}
+# results for counts based analyses for satuRn, DoubleExpSeq and limma 
+# diffsplice
+load(file="./Data/Tasic_DTU_results_count.Rdata")
+TasicDtuBenchmark_counts <- c(TasicDtuBenchmark_satuRn,
+                              TasicDtuBenchmark_DoubleExpSeq,
+                              TasicDtuBenchmark_limmaDiffsplice)
+names(TasicDtuBenchmark_counts) <- paste0(names(TasicDtuBenchmark_counts), 
+                                          "_counts")
+
+load(file="./Data/Tasic_DTU_results_scaledTPM.Rdata")
+TasicDtuBenchmark_sTPM <- c(TasicDtuBenchmark_satuRn,
+                            TasicDtuBenchmark_DoubleExpSeq,
+                            TasicDtuBenchmark_limmaDiffsplice)
+names(TasicDtuBenchmark_sTPM) <- paste0(names(TasicDtuBenchmark_sTPM), "_sTPM")
+
+results <- c(TasicDtuBenchmark_counts, TasicDtuBenchmark_sTPM)
+
+rm(list=setdiff(ls(), c("results", "metaInfo", "computePlot", "makePlot")))
+```
+
+## Generate requested plots
+
+```{r}
+plotlist_separate <- computePlot(result = results,
+                                 metadata = metaInfo)
+
+count <- 1
+figGrobs_Tasic <- list()
+
+for(i in 1:9) {
+    plotlist_current <- plotlist_separate[c(count:(count+3))]
+    
+    gg <- makePlot(plotlist = plotlist_current,
+                   colors = c("black", "red", "blue", "green3"),
+                   xaxisrange = c(0,0.4),
+                   dataset = "Tasic",
+                   type = "cells")
+    figGrobs_Tasic[[i]] <- gg
+    
+    count <- count+4
+}
+
+saveRDS(figGrobs_Tasic, "./Results/Benchmarks_additional/Filtering_abundanceMetrics/Tasic_strategies_data.rds")
+rm(list=setdiff(ls(), c("makePlot", "computePlot")))
+```
+
+---
+
+# Darmanis analysis
+
+## Get metadata
+
+```{r}
+# meta-info for counts based analyses
+load(file="./Data/Darmanis_benchmark_datasets_count.Rdata")
+metaInfo_counts <- c(DarmanisBenchmarkLenient,DarmanisBenchmarkStringent)
+names(metaInfo_counts) <- paste0(names(metaInfo_counts), "_counts")
+
+# meta-info for scaledTPM based analyses
+load(file="./Data/Darmanis_benchmark_datasets_scaledTPM.Rdata")
+metaInfo_sTPM <- c(DarmanisBenchmarkLenient,DarmanisBenchmarkStringent)
+names(metaInfo_sTPM) <- paste0(names(metaInfo_sTPM), "_sTPM")
+
+metaInfo <- c(metaInfo_counts, metaInfo_sTPM)
+```
+
+## Get results
+
+```{r}
+# results for counts based analyses for satuRn, DoubleExpSeq and limma diffsplice
+load(file="./Data/Darmanis_DTU_results_count.Rdata")
+DarmanisDtuBenchmark_counts <- c(DarmanisDtuBenchmark_satuRn,
+                                 DarmanisDtuBenchmark_DoubleExpSeq,
+                                 DarmanisDtuBenchmark_limmaDiffsplice)
+names(DarmanisDtuBenchmark_counts) <- paste0(names(DarmanisDtuBenchmark_counts), "_counts")
+
+load(file="./Data/Darmanis_DTU_results_scaledTPM.Rdata")
+DarmanisDtuBenchmark_sTPM <- c(DarmanisDtuBenchmark_satuRn,
+                               DarmanisDtuBenchmark_DoubleExpSeq,
+                               DarmanisDtuBenchmark_limmaDiffsplice)
+names(DarmanisDtuBenchmark_sTPM) <- paste0(names(DarmanisDtuBenchmark_sTPM), "_sTPM")
+
+results <- c(DarmanisDtuBenchmark_counts, DarmanisDtuBenchmark_sTPM)
+
+rm(list=setdiff(ls(), c("results", "metaInfo","makePlot", "computePlot")))
+```
+
+## Generate requested plots
+
+```{r}
+plotlist_separate <- computePlot(result = results,
+                                 metadata = metaInfo)
+
+count <- 1
+figGrobs_Darmanis <- list()
+
+for(i in 1:9) {
+    plotlist_current <- plotlist_separate[c(count:(count+3))]
+    
+    gg <- makePlot(plotlist = plotlist_current,
+                   colors = c("black", "red", "blue", "green3"),
+                   xaxisrange = c(0,0.4),
+                   dataset = "Darmanis",
+                   type = "cells")
+    figGrobs_Darmanis[[i]] <- gg
+    
+    count <- count+4
+}
+
+saveRDS(figGrobs_Darmanis, "./Results/Benchmarks_additional/Filtering_abundanceMetrics/Darmanis_strategies_data.rds")
+rm(list=setdiff(ls(), c("makePlot", "computePlot")))
+```
+
+---
+
+# Chen analysis
+
+## Get metadata
+
+```{r}
+# meta-info for counts based analyses
+load(file="./Data/Chen_benchmark_datasets_count.Rdata")
+metaInfo_counts <- c(ChenBenchmarkLenient,ChenBenchmarkStringent)
+names(metaInfo_counts) <- paste0(names(metaInfo_counts), "_counts")
+
+# meta-info for scaledTPM based analyses
+load(file="./Data/Chen_benchmark_datasets_scaledTPM.Rdata")
+metaInfo_sTPM <- c(ChenBenchmarkLenient,ChenBenchmarkStringent)
+names(metaInfo_sTPM) <- paste0(names(metaInfo_sTPM), "_sTPM")
+
+metaInfo <- c(metaInfo_counts, metaInfo_sTPM)
+names(metaInfo)
+```
+
+## Get results
+
+```{r}
+# results for counts based analyses for satuRn, DoubleExpSeq and limma diffsplice
+load(file="./Data/Chen_DTU_results_count.Rdata")
+ChenDtuBenchmark_counts <- c(ChenDtuBenchmark_satuRn,
+                             ChenDtuBenchmark_DoubleExpSeq,
+                             ChenDtuBenchmark_limmaDiffsplice)
+names(ChenDtuBenchmark_counts) <- paste0(names(ChenDtuBenchmark_counts), "_counts")
+
+load(file="./Data/Chen_DTU_results_scaledTPM.Rdata")
+ChenDtuBenchmark_sTPM <- c(ChenDtuBenchmark_satuRn,
+                           ChenDtuBenchmark_DoubleExpSeq,
+                           ChenDtuBenchmark_limmaDiffsplice)
+names(ChenDtuBenchmark_sTPM) <- paste0(names(ChenDtuBenchmark_sTPM), "_sTPM")
+
+results <- c(ChenDtuBenchmark_counts, ChenDtuBenchmark_sTPM)
+
+rm(list=setdiff(ls(), c("results", "metaInfo","makePlot", "computePlot")))
+```
+
+## Generate requested plots
+
+```{r}
+plotlist_separate <- computePlot(result = results,
+                                 metadata = metaInfo)
+
+count <- 1
+figGrobs_Chen <- list()
+
+for(i in 1:6) {
+    plotlist_current <- plotlist_separate[c(count:(count+3))]
+    
+    gg <- makePlot(plotlist = plotlist_current,
+                   colors = c("black", "red", "blue", "green3"),
+                   xaxisrange = c(0,0.4),
+                   dataset = "Chen",
+                   type = "cells")
+    figGrobs_Chen[[i]] <- gg
+    
+    count <- count+4
+}
+
+saveRDS(figGrobs_Chen, "./Results/Benchmarks_additional/Filtering_abundanceMetrics/Chen_strategies_data.rds")
+rm(list=setdiff(ls(), c("makePlot", "computePlot")))
+```
+
+---
+
+# Gtex analysis
+
+## Get metadata
+
+```{r}
+# meta-info for counts based analyses
+load(file="./Data/GTEx_benchmark_datasets_count.Rdata")
+metaInfo_counts <- c(gtexBenchmarkDataLenient,gtexBenchmarkDataStringent)
+names(metaInfo_counts) <- paste0(names(metaInfo_counts), "_counts")
+
+# meta-info for scaledTPM based analyses
+load(file="./Data/GTEx_benchmark_datasets_scaledTPM.Rdata")
+metaInfo_sTPM <- c(gtexBenchmarkDataLenient,gtexBenchmarkDataStringent)
+names(metaInfo_sTPM) <- paste0(names(metaInfo_sTPM), "_sTPM")
+
+metaInfo <- c(metaInfo_counts, metaInfo_sTPM)
+```
+
+## Get results
+
+```{r}
+# results for counts based analyses for satuRn, DoubleExpSeq and limma diffsplice
+load(file="./Data/GTEx_DTU_results_count.Rdata")
+gtexDtuBenchmark_counts <- c(gtexDtuBenchmark_satuRn,
+                             gtexDtuBenchmark_DoubleExpSeq,
+                             gtexDtuBenchmark_limmaDiffsplice)
+names(gtexDtuBenchmark_counts) <- paste0(names(gtexDtuBenchmark_counts), "_counts")
+
+load(file="./Data/GTEx_DTU_results_scaledTPM.Rdata")
+gtexDtuBenchmark_sTPM <- c(gtexDtuBenchmark_satuRn,
+                           gtexDtuBenchmark_DoubleExpSeq,
+                           gtexDtuBenchmark_limmaDiffsplice)
+names(gtexDtuBenchmark_sTPM) <- paste0(names(gtexDtuBenchmark_sTPM), "_sTPM")
+
+results <- c(gtexDtuBenchmark_counts, gtexDtuBenchmark_sTPM)
+
+rm(list=setdiff(ls(), c("results", "metaInfo","makePlot", "computePlot")))
+```
+
+## Generate requested plots
+
+```{r}
+plotlist_separate <- computePlot(result = results,
+                                 metadata = metaInfo)
+
+count <- 1
+figGrobs_gtex <- list()
+
+for(i in 1:9) {
+    plotlist_current <- plotlist_separate[c(count:(count+3))]
+    
+    gg <- makePlot(plotlist = plotlist_current,
+                   colors = c("black", "red", "blue", "green3"),
+                   xaxisrange = c(0,0.4),
+                   dataset = "Gtex",
+                   type = "samples")
+    figGrobs_gtex[[i]] <- gg
+    
+    count <- count+4
+}
+
+saveRDS(figGrobs_gtex, "./Results/Benchmarks_additional/Filtering_abundanceMetrics/gtex_strategies_data.rds")
+rm(list=setdiff(ls(), c("makePlot", "computePlot")))
+```
+
+# Hsapiens analysis
+
+## Get metadata
+
+```{r}
+# meta-info for counts based analyses
+load(file="./Data/Hsapiens_benchmark_datasets_count.Rdata")
+metaInfo_counts <- list(HsBenchmarkLenient,HsBenchmarkStringent)
+names(metaInfo_counts) <- c("samples_used_5_rep_1_filterLenient_counts", 
+                            "samples_used_5_rep_1_filterStringent_counts")
+
+# meta-info for scaledTPM based analyses
+load(file="./Data/Hsapiens_benchmark_datasets_scaledTPM.Rdata")
+metaInfo_sTPM <- list(HsBenchmarkLenient,HsBenchmarkStringent)
+names(metaInfo_sTPM) <- c("samples_used_5_rep_1_filterLenient_sTPM", 
+                          "samples_used_5_rep_1_filterStringent_sTPM")
+
+metaInfo <- c(metaInfo_counts, metaInfo_sTPM)
+for(i in seq_along(metaInfo)){
+    colnames(metaInfo[[i]]$metaInfo)[3] <- "txSwapped"
+}
+```
+
+## Get results
+
+```{r}
+# results for counts based analyses for satuRn, DoubleExpSeq and limma diffsplice
+load(file="./Data/Hsapiens_DTU_results_count.Rdata")
+HsapiensDtuBenchmark_counts <- c(HsDtuBenchmark_satuRn,
+                                 HsDtuBenchmark_DoubleExpSeq,
+                                 HsDtuBenchmark_limmaDiffsplice)
+
+filter <- rep(c("filterLenient","filterStringent"), times=3)
+method <- rep(c("satuRn","DoubleExpSeq","limma_diffsplice"), each=2)
+names(HsapiensDtuBenchmark_counts) <- paste0(method, 
+                                             "_samples_used_5_rep_1_",
+                                             filter,
+                                             "_counts")
+
+load(file="./Data/Hsapiens_DTU_results_scaledTPM.Rdata")
+HsapiensDtuBenchmark_sTPM <- c(HsDtuBenchmark_satuRn,
+                               HsDtuBenchmark_DoubleExpSeq,
+                               HsDtuBenchmark_limmaDiffsplice)
+names(HsapiensDtuBenchmark_sTPM) <- paste0(method,
+                                           "_samples_used_5_rep_1_",
+                                           filter,
+                                           "_sTPM")
+results <- c(HsapiensDtuBenchmark_counts, HsapiensDtuBenchmark_sTPM)
+
+rm(list=setdiff(ls(), c("results", "metaInfo","makePlot", "computePlot")))
+```
+
+## Generate requested plots
+
+```{r}
+plotlist_separate <- computePlot(result = results,
+                                 metadata = metaInfo)
+
+count <- 1
+figGrobs_Hsapiens <- list()
+
+for(i in 1:3) {
+    plotlist_current <- plotlist_separate[c(count:(count+3))]
+    
+    gg <- makePlot(plotlist = plotlist_current,
+                   colors = c("black", "red", "blue", "green3"),
+                   xaxisrange = c(0,0.4),
+                   dataset = "Hsapiens",
+                   type = "samples")
+    figGrobs_Hsapiens[[i]] <- gg
+    
+    count <- count+4
+}
+
+saveRDS(figGrobs_Hsapiens, "./Results/Benchmarks_additional/Filtering_abundanceMetrics/Hsapiens_strategies_data.rds")
+rm(list=setdiff(ls(), c("makePlot", "computePlot")))
+```
+
+# Dmelanogaster analysis
+
+## Get metadata
+
+```{r}
+# meta-info for counts based analyses
+load(file="./Data/Dmelanogaster_benchmark_datasets_count.Rdata")
+metaInfo_counts <- list(DmBenchmarkLenient,DmBenchmarkStringent)
+names(metaInfo_counts) <- c("samples_used_5_rep_1_filterLenient_counts", 
+                            "samples_used_5_rep_1_filterStringent_counts")
+
+# meta-info for scaledTPM based analyses
+load(file="./Data/Dmelanogaster_benchmark_datasets_scaledTPM.Rdata")
+metaInfo_sTPM <- list(DmBenchmarkLenient,DmBenchmarkStringent)
+names(metaInfo_sTPM) <- c("samples_used_5_rep_1_filterLenient_sTPM", 
+                          "samples_used_5_rep_1_filterStringent_sTPM")
+
+metaInfo <- c(metaInfo_counts, metaInfo_sTPM)
+for(i in seq_along(metaInfo)){
+    colnames(metaInfo[[i]]$metaInfo)[3] <- "txSwapped"
+}
+```
+
+## Get results
+
+```{r}
+# results for counts based analyses for satuRn, DoubleExpSeq and limma diffsplice
+load(file="./Data/Dmelanogaster_DTU_results_count.Rdata")
+DmelanogasterDtuBenchmark_counts <- c(DmDtuBenchmark_satuRn,
+                                      DmDtuBenchmark_DoubleExpSeq,
+                                      DmDtuBenchmark_limmaDiffsplice)
+
+filter <- rep(c("filterLenient","filterStringent"), times=3)
+method <- rep(c("satuRn","DoubleExpSeq","limma_diffsplice"), each=2)
+names(DmelanogasterDtuBenchmark_counts) <- paste0(method, 
+                                             "_samples_used_5_rep_1_",
+                                             filter,
+                                             "_counts")
+
+load(file="./Data/Dmelanogaster_DTU_results_scaledTPM.Rdata")
+DmelanogasterDtuBenchmark_sTPM <- c(DmDtuBenchmark_satuRn,
+                                      DmDtuBenchmark_DoubleExpSeq,
+                                      DmDtuBenchmark_limmaDiffsplice)
+names(DmelanogasterDtuBenchmark_sTPM) <- paste0(method,
+                                           "_samples_used_5_rep_1_",
+                                           filter,
+                                           "_sTPM")
+results <- c(DmelanogasterDtuBenchmark_counts, DmelanogasterDtuBenchmark_sTPM)
+
+rm(list=setdiff(ls(), c("results", "metaInfo","makePlot", "computePlot")))
+```
+
+## Generate requested plots
+
+```{r}
+plotlist_separate <- computePlot(result = results,
+                                 metadata = metaInfo)
+
+count <- 1
+figGrobs_Dmelanogaster <- list()
+
+for(i in 1:3) {
+    plotlist_current <- plotlist_separate[c(count:(count+3))]
+    
+    gg <- makePlot(plotlist = plotlist_current,
+                   colors = c("black", "red", "blue", "green3"),
+                   xaxisrange = c(0,0.4),
+                   dataset = "Dmelanogaster",
+                   type = "samples")
+    figGrobs_Dmelanogaster[[i]] <- gg
+    
+    count <- count+4
+}
+
+saveRDS(figGrobs_Dmelanogaster, "./Results/Benchmarks_additional/Filtering_abundanceMetrics/Dmelanogaster_strategies_data.rds")
+rm(list=setdiff(ls(), c("makePlot", "computePlot")))
+```
+
+# Love analysis
+
+## Get metadata
+
+```{r}
+# meta-info for counts based analyses
+load(file="./Data/Love_benchmark_datasets_count.Rdata")
+metaInfo_counts <- c(LoveBenchmarkLenient,LoveBenchmarkStringent)
+names(metaInfo_counts) <- paste0(names(metaInfo_counts), "_counts")
+
+# meta-info for scaledTPM based analyses
+load(file="./Data/Love_benchmark_datasets_scaledTPM.Rdata")
+metaInfo_sTPM <- c(LoveBenchmarkLenient,LoveBenchmarkStringent)
+names(metaInfo_sTPM) <- paste0(names(metaInfo_sTPM), "_sTPM")
+
+metaInfo <- c(metaInfo_counts, metaInfo_sTPM)
+for(i in seq_along(metaInfo)){
+    colnames(metaInfo[[i]]$metaInfo)[3] <- "txSwapped"
+}
+```
+
+## Get results
+
+```{r}
+# results for counts based analyses for satuRn, DoubleExpSeq and limma diffsplice
+load(file="./Data/Love_DTU_results_count.Rdata")
+LoveDtuBenchmark_counts <- c(loveDtuBenchmark_satuRn,
+                             loveDtuBenchmark_DoubleExpSeq,
+                             loveDtuBenchmark_limmaDiffsplice)
+names(LoveDtuBenchmark_counts) <- paste0(names(LoveDtuBenchmark_counts), "_counts")
+
+load(file="./Data/Love_DTU_results_scaledTPM.Rdata")
+LoveDtuBenchmark_sTPM <- c(loveDtuBenchmark_satuRn,
+                           loveDtuBenchmark_DoubleExpSeq,
+                           loveDtuBenchmark_limmaDiffsplice)
+names(LoveDtuBenchmark_sTPM) <- paste0(names(LoveDtuBenchmark_sTPM), "_sTPM")
+results <- c(LoveDtuBenchmark_counts, LoveDtuBenchmark_sTPM)
+
+rm(list=setdiff(ls(), c("results", "metaInfo","makePlot", "computePlot")))
+```
+
+## Generate requested plots
+
+```{r}
+plotlist_separate <- computePlot(result = results,
+                                 metadata = metaInfo,
+                                 print = FALSE)
+
+count <- 1
+figGrobs_Love <- list()
+
+for(i in 1:9) {
+    plotlist_current <- plotlist_separate[c(count:(count+3))]
+    
+    gg <- makePlot(plotlist = plotlist_current,
+                   colors = c("black", "red", "blue", "green3"),
+                   xaxisrange = c(0,0.4),
+                   dataset = "Love",
+                   type = "samples")
+    figGrobs_Love[[i]] <- gg
+    
+    count <- count+4
+}
+
+saveRDS(figGrobs_Love, "./Results/Benchmarks_additional/Filtering_abundanceMetrics/Love_strategies_data.rds")
+rm(list=ls())
+gc()
+```
+
+# Plot to PDF
+
+```{r}
+figGrobs_Tasic <- readRDS("./Results/Benchmarks_additional/Filtering_abundanceMetrics/Tasic_strategies_data.rds")
+figGrobs_Darmanis <- readRDS("./Results/Benchmarks_additional/Filtering_abundanceMetrics/Darmanis_strategies_data.rds")
+figGrobs_Chen <- readRDS("./Results/Benchmarks_additional/Filtering_abundanceMetrics/Chen_strategies_data.rds")
+figGrobs_gtex <- readRDS("./Results/Benchmarks_additional/Filtering_abundanceMetrics/gtex_strategies_data.rds")
+figGrobs_Hsapiens <- readRDS("./Results/Benchmarks_additional/Filtering_abundanceMetrics/Hsapiens_strategies_data.rds")
+figGrobs_Dmelanogaster <- readRDS("./Results/Benchmarks_additional/Filtering_abundanceMetrics/Dmelanogaster_strategies_data.rds")
+figGrobs_Love <- readRDS("./Results/Benchmarks_additional/Filtering_abundanceMetrics/Love_strategies_data.rds")
+
+# here each panel is plotted on a separate PDF page
+pdf(file="./Results/Benchmarks_additional/Filtering_abundanceMetrics/filt_quant_all.pdf",
+    width = 5,
+    height = 5)
+
+figGrobs_Dmelanogaster
+figGrobs_Love
+figGrobs_Hsapiens
+figGrobs_gtex
+figGrobs_Tasic
+figGrobs_Chen
+figGrobs_Darmanis
+
+dev.off()
+
+# alternatively, use grid.arrange to plot multiple panels on 1 page
+# grid.arrange(figGrobs_Tasic[[7]], figGrobs_Tasic[[9]],
+#              figGrobs_Tasic[[1]], figGrobs_Tasic[[3]], 
+#              figGrobs_Tasic[[4]], figGrobs_Tasic[[6]],
+#              ncol=2, nrow=3)
+```
+
+

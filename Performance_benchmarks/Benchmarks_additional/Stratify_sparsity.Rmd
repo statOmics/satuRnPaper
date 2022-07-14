@@ -1,0 +1,468 @@
+---
+title: "Additional benchmark: stratify performance on data sparsity"
+author: "Jeroen Gilis"
+date: "08/07/2022"
+output: html_document
+---
+
+In this script, we explored how differences in sparsity between the different 
+datasets are reflected in the performance benchmarks. To this end, we construct 
+FDR-TPR curves where the genes (not individual transcripts) have been stratified
+on the percentage of zero counts. For each dataset, we thus assess the 
+performance on three strata of genes, i.e., for genes that have a low (< 25%), 
+middle (25-50%) or high (> 50%) percentage of zero counts in their corresponding transcript-level count matrices. All the transcripts of the gene get stratified 
+in this gene-level stratum. The results of this performance benchmark have been 
+included in the Extended data, Figures S30 and S31. As expected, we observe that 
+performances are higher when there is a low percentage of zero counts, uniformly 
+across all datasets and for all methods. Second, performances on genes with high 
+percentage zero counts increase strongly when the number of cells in the data 
+increases (comparison between the bottom rows of Figures S30 and S31). Third, 
+some methods seem more sensitive than others against sparse data. In particular,
+the performance of DEXSeq on the Tasic et al. 20v20 dataset and the Chen et al. 
+20v20 dataset (Figure S30) is on par with the performance of satuRn and 
+DoubleExpSeq for the strata with a low or middle percentage of zeros, but 
+markedly lower for the stratum with the highest percentage of zeros. As such, 
+the performance gain of satuRn and DoubleExpSeq over DEXSeq in these datasets 
+can be largely attributed to a better performance on the sparsest part of the 
+data. Note that this is in line with the performance of DEXSeq being on par 
+with satuRn and DoubleExpSeq on bulk data.
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+# Load libraries
+
+```{r,message=FALSE,warning=FALSE}
+library(ggplot2)
+library(iCOBRA)
+```
+
+# Helper functions
+
+## get_pvalues
+
+Get pvalues for the different methods on the different datasets
+
+```{r}
+get_pvalues <- function(dataset,nrep,nmethods) {
+  
+  get_all_txs <- function(dataset,nrep){
+  
+    all_txs <- c()
+    for (i in 1:nrep) {
+      current_txs <- as.character(dataset[[i]]$dtuAnalysis$TXNAME)
+      all_txs <- c(all_txs, current_txs)
+      all_txs <- unique(all_txs)
+    }
+    return(all_txs)
+  }
+
+  all_txs <- get_all_txs(dataset,nrep)
+  pvalues <- matrix(data=NA, nrow=length(all_txs), ncol=nmethods*nrep)
+  rownames(pvalues) <- all_txs
+  
+  for (i in 1:(nmethods*nrep)) {
+    pvalues_new <- data.frame(dataset[[i]]$dtuAnalysis$p_value)
+    rownames(pvalues_new) <- as.character(dataset[[i]]$dtuAnalysis$TXNAME)
+    colnames(pvalues_new) <- names(dataset)[i]
+
+    pvalues[,i] <- pvalues_new[match(rownames(pvalues),rownames(pvalues_new)),1]
+  }
+  
+  pvalues <- apply(pvalues, 2, as.numeric)
+  rownames(pvalues) <- all_txs
+  pvalues <- as.data.frame(pvalues)
+  pvalues <- pvalues[order(rownames(pvalues)),]
+  
+  if(nmethods == 6){
+    colnames(pvalues) <- c("satuRn", "limma_diffsplice", "DEXSeq", 
+                           "DRIMSeq","edgeR_diffsplice", "DoubleExpSeq")
+  } else {
+    colnames(pvalues) <- c("satuRn", "limma_diffsplice",
+                           "edgeR_diffsplice", "DoubleExpSeq")
+  }
+  return(pvalues)
+}
+```
+
+## visualize_datasets
+
+Generate FDR TPR curves with performances for each method stratified on the 
+number of zero counts
+
+```{r}
+visualize_datasets <- function(dataset,
+                               metaInfo,
+                               saveName,
+                               nFilters,
+                               nSampleSizes,
+                               nRep,
+                               nmethods,
+                               selection,
+                               selection2) {
+
+    count <- 0
+    nPlots <- nFilters * nSampleSizes
+    print(paste("This function will generate",  nPlots, "plots"))
+  
+    for (j in 1:nPlots) {
+        print(j)
+        Tasic_current_outer <- dataset[grepl(selection[j], names(dataset))]
+        metaInfo_current_outer <- metaInfo[grepl(selection2[j], names(metaInfo))]
+        sampleSize <- gsub("([0-9]+).*$", "\\1", selection2[j])
+
+        resList <- c()
+        count <- count+1
+
+        for (k in 1:length(nRep)) {
+            Tasic_current_inner <- Tasic_current_outer[grepl(nRep[k], names(Tasic_current_outer))]
+
+            metaInfo_current_inner <- metaInfo_current_outer[grepl(nRep[k], names(metaInfo_current_outer))]
+    
+            pvalues <- get_pvalues(Tasic_current_inner,nrep=1,nmethods)
+
+            truth_file <- Tasic_current_inner[[1]]$dtuAnalysis
+    
+            if(count <= nSampleSizes){
+                txSwapped <- metaInfo_current_inner[1]          
+                } else {
+                txSwapped <- metaInfo_current_inner[2]
+            }
+    
+            truth_file <- truth_file[,c("TXNAME","p_value")]
+            
+            ################### extra part to compute splv's ###################
+            counts <- txSwapped[[1]]$data
+            tx2gene <- txSwapped[[1]]$metaInfo[,c(1,2)]
+            ncells <- ncol(counts)
+            frac0 <- c()
+            
+            for (gene in unique(tx2gene$GENEID)) {
+
+                transcripts <- tx2gene[tx2gene$GENEID == gene, "TXNAME"]
+                frac0 <- c(frac0,rep(
+                           sum(counts[transcripts,] == 0)/(length(transcripts)*ncells),times=length(transcripts)))
+            }
+            
+            names(frac0) <- tx2gene$TXNAME
+            frac0_cat <- cut(frac0, 
+                             breaks=c(-Inf, 0.25, 0.5, Inf), 
+                             labels=c("low","middle","high"))
+            names(frac0_cat) <- names(frac0)
+            ####################################################################
+    
+            txSwapped[[1]]$metaInfo <- txSwapped[[1]]$metaInfo[match(truth_file$TXNAME,txSwapped[[1]]$metaInfo$TXNAME),]
+    
+            truth_file$gene_modified <- as.numeric(txSwapped[[1]]$metaInfo$txSwapped)
+            truth_file <- truth_file[order(truth_file$TXNAME),]
+            truth_file$frac0_cat <- frac0_cat[match(truth_file$TXNAME, names(frac0_cat))]
+            truth_file$frac0_cat <- as.factor(truth_file$frac0_cat)
+            rownames(truth_file) <- truth_file$TXNAME
+
+            resList[[k]] <- list(pvalues,truth_file)
+        }
+        
+        rownames(resList[[1]][[1]]) <- paste0(rownames(resList[[1]][[1]]), "_1")
+        rownames(resList[[2]][[1]]) <- paste0(rownames(resList[[2]][[1]]), "_2")
+        rownames(resList[[3]][[1]]) <- paste0(rownames(resList[[3]][[1]]), "_3")
+        
+        pvalues_full <- rbind(resList[[1]][[1]],
+                              resList[[2]][[1]],
+                              resList[[3]][[1]])
+        
+        rownames(resList[[1]][[2]]) <- paste0(rownames(resList[[1]][[2]]), "_1")
+        rownames(resList[[2]][[2]]) <- paste0(rownames(resList[[2]][[2]]), "_2")
+        rownames(resList[[3]][[2]]) <- paste0(rownames(resList[[3]][[2]]), "_3")
+        
+        truth_file_full <- rbind(resList[[1]][[2]],
+                                 resList[[2]][[2]],
+                                 resList[[3]][[2]])
+        
+        lowlevel <- paste0("low (n=",round(sum(truth_file_full$frac0_cat == "low")/3),")")
+        middlelevel <- paste0("middle (n=",round(sum(truth_file_full$frac0_cat == "middle")/3),")")
+        highlevel <- paste0("high (n=",round(sum(truth_file_full$frac0_cat == "high")/3),")")
+        
+        levels(truth_file_full$frac0_cat) <- c(lowlevel,middlelevel,highlevel)
+        
+        cobra <- COBRAData(pval = pvalues_full, truth = truth_file_full)
+        cobra <- calculate_adjp(cobra)
+        cobra1perf <- calculate_performance(cobra, binary_truth = "gene_modified", cont_truth = "none", splv = "frac0_cat", aspects = c("fdrtpr", "fdrtprcurve", "overlap"))
+
+        cobraplot <- prepare_data_for_plot(cobra1perf, colorscheme = "Dark2", facetted = TRUE)
+        cobraplot@fdrtprcurve$splitval <- factor(cobraplot@fdrtprcurve$splitval,
+                                                 levels=c("overall",
+                                                          paste0("frac0_cat:",lowlevel),
+                                                          paste0("frac0_cat:",middlelevel),
+                                                          paste0("frac0_cat:",highlevel)))
+
+        if (nmethods == 6){
+          
+            colors <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "black", "#999999")
+            whites <- length(which(cobraplot@plotcolors == "white"))
+            notwhites <- length(which(cobraplot@plotcolors != "white"))/length(colors)
+            new_col <- c(rep(colors,notwhites),
+                        rep("white",whites))
+            names(new_col) <- names(cobraplot@plotcolors)
+            cobraplot@plotcolors <- new_col
+    
+            plot <- plot_fdrtprcurve(cobraplot, 
+                                     xaxisrange = c(0, 0.4), 
+                                     yaxisrange = c(0,1),
+                                     pointsize = 2,
+                                     linewidth = 0.75)
+            plot <- plot + scale_color_manual(values = new_col, limits=force)
+    
+            current_title <- paste0(sampleSize, " versus ", 
+                                    sampleSize, " - edgeR filter - count")
+        } else {
+            colors <- c("#56B4E9", "#F0E442", "#0072B2", "black", "#999999")
+            whites <- length(which(cobraplot@plotcolors == "white"))
+            notwhites <- length(which(cobraplot@plotcolors != "white"))/length(colors)
+            
+            new_col <-c(rep(colors,notwhites),
+                        rep("white", whites))
+            names(new_col) <- names(cobraplot@plotcolors)
+            cobraplot@plotcolors <- new_col
+    
+            plot <- plot_fdrtprcurve(cobraplot, 
+                                     xaxisrange = c(0, 0.3), 
+                                     yaxisrange = c(0,1),
+                                     pointsize = 2,
+                                     linewidth = 0.75)
+            plot <- plot + scale_color_manual(values = new_col, limits=force)
+            current_title <- paste0(sampleSize, " versus ", 
+                                    sampleSize, " - edgeR filter - count")
+        }
+
+        plot <- plot + 
+            ggtitle(current_title) +
+            theme(strip.text.x = element_text(size = 12),
+                  plot.title = element_text(size=14,face="bold"),
+                  axis.text.x = element_text(size = 12),
+                  axis.text.y = element_text(size = 12),
+                  axis.title.x = element_text(size = 12),
+                  axis.title.y = element_text(size = 12),
+                  legend.position="none") +
+            facet_wrap(~splitval, ncol = 1)
+      
+      png(paste("./Results/Stratify_zeroes/", saveName, "_",  selection2[j], "_",
+                sub("^[^f]*", "", selection[j]), "_count.png", sep = ""),
+            width     = 3.5,
+            height    = 12,
+            units     = "in",
+            res       = 200,
+            pointsize = 4) # start export
+      print(plot)
+      dev.off()
+  }
+}
+```
+
+# Tasic dataset
+
+## Load truth file
+
+```{r}
+load(file="./Data/Tasic_benchmark_datasets_count.Rdata")
+metaInfo <- c(TasicBenchmarkLenient,TasicBenchmarkStringent)
+rm(TasicBenchmarkLenient,TasicBenchmarkStringent)
+```
+
+## Load DTU performance data
+
+```{r}
+load(file="./Data/Tasic_DTU_results_count.Rdata")
+
+TasicBenchmark <- c(
+    TasicDtuBenchmark_satuRn,
+    TasicDtuBenchmark_limmaDiffsplice,
+    TasicDtuBenchmark_DEXSeq,
+    TasicDtuBenchmark_DRIMSeq,
+    TasicDtuBenchmark_edgeRdiffsplice,
+    TasicDtuBenchmark_DoubleExpSeq)
+
+### Remove empty enteries (due to not tested - aka to many samples for reasonable runtime)
+TasicBenchmark  <- TasicBenchmark[which(
+    sapply(TasicBenchmark, function(x) ! is.null(x$dtuAnalysis)))]
+
+rm(TasicDtuBenchmark_satuRn,
+    TasicDtuBenchmark_limmaDiffsplice,
+    TasicDtuBenchmark_DEXSeq,
+    TasicDtuBenchmark_DRIMSeq,
+    TasicDtuBenchmark_edgeRdiffsplice,
+    TasicDtuBenchmark_DoubleExpSeq)
+invisible(gc())
+```
+
+## Generate FDR-TPR curves
+
+```{r}
+selection <- c("20_rep_._filterLenient")
+selection2 <- c("20_rep")
+
+visualize_datasets(dataset=TasicBenchmark,
+                   metaInfo=metaInfo,
+                   saveName="Tasic",
+                   nFilters=1,
+                   nSampleSizes=1,
+                   nRep=c("rep_1","rep_2","rep_3"),
+                   nmethods=6,
+                   selection=selection,
+                   selection2=selection2)
+
+selection <- c("200_rep_._filterLenient")
+selection2 <- c("200_rep")
+
+visualize_datasets(TasicBenchmark,
+                   metaInfo,
+                   saveName="Tasic",
+                   nFilters=1,
+                   nSampleSizes=1,
+                   nRep=c("rep_1","rep_2","rep_3"),
+                   nmethods=4,
+                   selection = selection,
+                   selection2=selection2)
+```
+
+# Chen dataset
+
+## Load truth file
+
+```{r}
+load(file="./Data/Chen_benchmark_datasets_count.Rdata")
+metaInfo <- c(ChenBenchmarkLenient,ChenBenchmarkStringent)
+rm(ChenBenchmarkLenient,ChenBenchmarkStringent)
+```
+
+## Load DTU performance results
+
+```{r}
+load(file="./Data/Chen_DTU_results_count.Rdata")
+
+ChenBenchmark <- c(
+    ChenDtuBenchmark_satuRn,
+    ChenDtuBenchmark_limmaDiffsplice,
+    ChenDtuBenchmark_DEXSeq,
+    ChenDtuBenchmark_DRIMSeq,
+    ChenDtuBenchmark_edgeRdiffsplice,
+    ChenDtuBenchmark_DoubleExpSeq
+)
+
+### Remove empty entries (due to not tested - aka to many samples for reasonable runtime)
+ChenBenchmark  <- ChenBenchmark[which(
+    sapply(ChenBenchmark, function(x) ! is.null(x$dtuAnalysis)))]
+
+rm(ChenDtuBenchmark_satuRn,
+    ChenDtuBenchmark_limmaDiffsplice,
+    ChenDtuBenchmark_DEXSeq,
+    ChenDtuBenchmark_DRIMSeq,
+    ChenDtuBenchmark_edgeRdiffsplice,
+    ChenDtuBenchmark_DoubleExpSeq)
+invisible(gc())
+```
+
+# Generate FDR-TPR curves
+
+```{r}
+selection <- c("20_rep_._filterLenient")
+selection2 <- c("20_rep")
+
+visualize_datasets(dataset=ChenBenchmark,
+                   metaInfo,
+                   saveName="Chen",
+                   nFilters=1,
+                   nSampleSizes=1,
+                   nRep=c("rep_1","rep_2","rep_3"),
+                   nmethods=6,
+                   selection = selection,
+                   selection2=selection2)
+
+
+selection <- c("_50_rep_._filterLenient")
+selection2 <- c("50_rep")
+
+visualize_datasets(ChenBenchmark,
+                   metaInfo,
+                   saveName="Chen",
+                   nFilters=1,
+                   nSampleSizes=1,
+                   nRep=c("rep_1","rep_2","rep_3"),
+                   nmethods=4,
+                   selection = selection,
+                   selection2=selection2)
+```
+
+# Load truth file
+
+```{r}
+load(file="./Data/Darmanis_benchmark_datasets_count.Rdata")
+metaInfo <- c(DarmanisBenchmarkLenient,DarmanisBenchmarkStringent)
+rm(DarmanisBenchmarkLenient,DarmanisBenchmarkStringent)
+```
+
+# Load DTU performance results
+
+```{r}
+load(file="./Data/Darmanis_DTU_results_count.Rdata")
+
+DarmanisBenchmark <- c(
+    DarmanisDtuBenchmark_satuRn,
+    DarmanisDtuBenchmark_limmaDiffsplice,
+    DarmanisDtuBenchmark_DEXSeq,
+    DarmanisDtuBenchmark_DRIMSeq,
+    DarmanisDtuBenchmark_edgeRdiffsplice,
+    DarmanisDtuBenchmark_DoubleExpSeq)
+
+### Remove empty entries (due to not tested - aka to many samples for reasonable runtime)
+DarmanisBenchmark  <- DarmanisBenchmark[which(
+    sapply(DarmanisBenchmark, function(x) ! is.null(x$dtuAnalysis)))]
+
+rm(DarmanisDtuBenchmark_satuRn,
+    DarmanisDtuBenchmark_limmaDiffsplice,
+    DarmanisDtuBenchmark_DEXSeq,
+    DarmanisDtuBenchmark_DRIMSeq,
+    DarmanisDtuBenchmark_edgeRdiffsplice,
+    DarmanisDtuBenchmark_DoubleExpSeq)
+invisible(gc())
+```
+
+# Generate FDR-TPR curves
+
+```{r}
+selection <- c("20_rep_._filterLenient")
+selection2 <- c("20_rep")
+
+visualize_datasets(DarmanisBenchmark,
+                   metaInfo,
+                   saveName="Darmanis",
+                   nFilters=1,
+                   nSampleSizes=1,
+                   nRep=c("rep_1","rep_2","rep_3"),
+                   nmethods=6,
+                   selection = selection,
+                   selection2=selection2)
+
+selection <- c("100_rep_._filterLenient")
+selection2 <- c("100_rep")
+
+visualize_datasets(DarmanisBenchmark,
+                   metaInfo,
+                   saveName="Darmanis",
+                   nFilters=1,
+                   nSampleSizes=1,
+                   nRep=c("rep_1","rep_2","rep_3"),
+                   nmethods=4,
+                   selection=selection,
+                   selection2=selection2)
+```
+
+
+
+
+
+
+
+
+
